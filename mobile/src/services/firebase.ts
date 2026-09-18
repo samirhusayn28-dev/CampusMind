@@ -4,7 +4,6 @@ import { initializeAuth, getReactNativePersistence, getAuth, GoogleAuthProvider,
 import { getFirestore, doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { UserProfile } from '../types/auth';
 
 export const firebaseConfig = {
@@ -20,22 +19,6 @@ export const firebaseConfig = {
     : '1:220472508393:android:d9de82b3808138e8d2d578'),
 };
 
-// Initialize Firebase App
-export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-
-// Initialize Auth with AsyncStorage Persistence
-let authInstance: any;
-try {
-  authInstance = initializeAuth(app, {
-    persistence: getReactNativePersistence(AsyncStorage),
-  });
-} catch {
-  authInstance = getAuth(app);
-}
-
-export const auth = authInstance;
-export const db = getFirestore(app);
-
 // Client IDs for Native Google Sign-In
 export const GOOGLE_CONFIG = {
   webClientId:
@@ -46,10 +29,73 @@ export const GOOGLE_CONFIG = {
     '220472508393-m63rfu8n1ul1l613u1i7oblae4n3moav.apps.googleusercontent.com',
 };
 
+// Safely resolve GoogleSignin at runtime so module evaluation never throws at top level
+let GoogleSignin: any = null;
+let statusCodes: any = {
+  SIGN_IN_CANCELLED: 'SIGN_IN_CANCELLED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  PLAY_SERVICES_NOT_AVAILABLE: 'PLAY_SERVICES_NOT_AVAILABLE',
+};
+
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const gModule = require('@react-native-google-signin/google-signin');
+  GoogleSignin = gModule.GoogleSignin;
+  if (gModule.statusCodes) {
+    statusCodes = gModule.statusCodes;
+  }
+} catch (e) {
+  console.warn('[GoogleAuth] Native GoogleSignin module unavailable:', e);
+}
+
+export { statusCodes };
+
+// Initialize Firebase App
+let appInstance: any;
+try {
+  appInstance = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+} catch (e) {
+  console.warn('[Firebase] App initialization fallback:', e);
+  appInstance = {} as any;
+}
+export const app = appInstance;
+
+// Initialize Auth with AsyncStorage Persistence
+let authInstance: any;
+try {
+  if (typeof getReactNativePersistence === 'function') {
+    authInstance = initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+  } else {
+    authInstance = getAuth(app);
+  }
+} catch {
+  try {
+    authInstance = getAuth(app);
+  } catch {
+    authInstance = {} as any;
+  }
+}
+
+export const auth = authInstance;
+
+let dbInstance: any;
+try {
+  dbInstance = getFirestore(app);
+} catch {
+  dbInstance = {} as any;
+}
+export const db = dbInstance;
+
 // Configure GoogleSignin once at startup
 let isGoogleSigninConfigured = false;
 export function configureGoogleSignIn(): void {
   if (isGoogleSigninConfigured) return;
+  if (!GoogleSignin || typeof GoogleSignin.configure !== 'function') {
+    console.warn('[GoogleAuth] Native GoogleSignin not available on this device');
+    return;
+  }
   try {
     GoogleSignin.configure({
       webClientId: GOOGLE_CONFIG.webClientId,

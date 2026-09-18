@@ -7,6 +7,12 @@
     "icon": "./assets/icon.png",
     "scheme": "campusmind",
     "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FBF9F5"
+    },
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.campusmind.app",
@@ -15,13 +21,17 @@
     "android": {
       "package": "com.campusmind.app",
       "adaptiveIcon": {
-        "backgroundColor": "#FBF9F5"
+        "backgroundColor": "#FBF9F5",
+        "foregroundImage": "./assets/android-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false,
       "googleServicesFile": "./google-services.json"
     },
     "plugins": [
       "expo-font",
+      "expo-av",
+      "expo-image-picker",
+      "expo-document-picker",
       [
         "@react-native-google-signin/google-signin",
         {

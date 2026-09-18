@@ -41,7 +41,7 @@ export const RootNavigator: React.FC = () => {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
         <View style={[styles.logoCircle, { backgroundColor: colors.primaryContainer }]}>
-          <Ionicons name="school" size={36} color={colors.primary} />
+          <Text style={{ fontSize: 32 }}>🎓</Text>
         </View>
         <Text style={[styles.loadingTitle, { color: colors.textPrimary }]}>CampusMind</Text>
         <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />
