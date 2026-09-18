@@ -12,7 +12,6 @@
       "resizeMode": "contain",
       "backgroundColor": "#FBF9F5"
     },
-    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.campusmind.app",

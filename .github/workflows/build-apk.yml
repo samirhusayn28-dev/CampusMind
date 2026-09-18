@@ -69,9 +69,6 @@ jobs:
         run: |
           cd mobile
           EXPO_NO_TELEMETRY=1 npx expo prebuild --platform android --no-install
-          # Enforce stable Old Architecture to prevent TurboModule / JNI launch crashes
-          sed -i 's/newArchEnabled=true/newArchEnabled=false/g' android/gradle.properties
-          grep "newArchEnabled" android/gradle.properties
 
 
       - name: 🐘 Build Release APK with Gradle
