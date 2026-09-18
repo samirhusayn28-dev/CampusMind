@@ -4,5 +4,7 @@ node_modules/
 .env.local
 dist/
 web-build/
+android/
+ios/
 *.log
 .DS_Store
