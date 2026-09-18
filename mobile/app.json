@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "CampusMind",
+    "slug": "campusmind",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "campusmind",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.campusmind.app",
+      "googleServicesFile": "./GoogleService-Info.plist"
+    },
+    "android": {
+      "package": "com.campusmind.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#FBF9F5"
+      },
+      "predictiveBackGestureEnabled": false,
+      "googleServicesFile": "./google-services.json"
+    },
+    "plugins": [
+      "expo-font",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.220472508393-m63rfu8n1ul1l613u1i7oblae4n3moav"
+        }
+      ]
+    ]
+  }
+}

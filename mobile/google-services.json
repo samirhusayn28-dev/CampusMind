@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "220472508393",
+    "project_id": "campusmind-d65c1",
+    "storage_bucket": "campusmind-d65c1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:220472508393:android:d9de82b3808138e8d2d578",
+        "android_client_info": {
+          "package_name": "com.campusmind.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "220472508393-0kviptkk3bo3a8sv9qi19qluiuj4pq7q.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCblXoyveX8NqcGH19Hg5YMoAuaSWOuC7U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "220472508393-0kviptkk3bo3a8sv9qi19qluiuj4pq7q.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
