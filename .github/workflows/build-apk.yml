@@ -92,50 +92,7 @@ jobs:
           keytool -list -v -keystore mobile/android/app/campusmind-release.keystore -alias campusmind -storepass campusmind123
 
           # Inject release signingConfig into mobile/android/app/build.gradle
-          node -e '
-            const fs = require("fs");
-            const gradlePath = "mobile/android/app/build.gradle";
-            let content = fs.readFileSync(gradlePath, "utf8");
-
-            const debugConfig = `        debug {
-            storeFile file(\x27debug.keystore\x27)
-            storePassword \x27android\x27
-            keyAlias \x27androiddebugkey\x27
-            keyPassword \x27android\x27
-        }`;
-
-            const releaseConfig = `        release {
-            storeFile file(\x27campusmind-release.keystore\x27)
-            storePassword \x27campusmind123\x27
-            keyAlias \x27campusmind\x27
-            keyPassword \x27campusmind123\x27
-        }`;
-
-            if (content.includes(debugConfig)) {
-              content = content.replace(debugConfig, debugConfig + "\n" + releaseConfig);
-            } else {
-              content = content.replace("signingConfigs {", "signingConfigs {\n" + releaseConfig);
-            }
-
-            const oldReleaseBlock = `        release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug`;
-
-            const newReleaseBlock = `        release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.release`;
-
-            if (content.includes(oldReleaseBlock)) {
-              content = content.replace(oldReleaseBlock, newReleaseBlock);
-            } else {
-              content = content.replace("signingConfig signingConfigs.debug\n            def enableShrinkResources", "signingConfig signingConfigs.release\n            def enableShrinkResources");
-            }
-
-            fs.writeFileSync(gradlePath, content);
-            console.log("✅ Successfully injected release signingConfig into build.gradle");
-          '
+          node scripts/configure-release-keystore.js
 
       - name: 🐘 Build Release APK with Gradle
         env:
