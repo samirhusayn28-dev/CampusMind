@@ -54,18 +54,38 @@ export const RootNavigator: React.FC = () => {
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
-          animation: 'fade',
+          animation: 'fade_from_bottom',
+          animationDuration: 280,
+          gestureEnabled: true,
+          fullScreenGestureEnabled: true,
         }}
       >
         {!hasCompletedOnboarding ? (
-          <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+          <Stack.Screen
+            name="Onboarding"
+            component={OnboardingScreen}
+            options={{ animation: 'fade', animationDuration: 250 }}
+          />
         ) : !isAuthenticated ? (
-          <Stack.Screen name="Auth" component={AuthScreen} />
+          <Stack.Screen
+            name="Auth"
+            component={AuthScreen}
+            options={{ animation: 'fade', animationDuration: 250 }}
+          />
         ) : (
           <>
-            <Stack.Screen name="MainTabs" component={TabNavigator} />
+            <Stack.Screen
+              name="MainTabs"
+              component={TabNavigator}
+              options={{ animation: 'fade', animationDuration: 250 }}
+            />
             <Stack.Screen
               name="Summary"
+              options={{
+                animation: 'slide_from_right',
+                animationDuration: 280,
+                gestureEnabled: true,
+              }}
               component={({ navigation, route }: any) => (
                 <ContentSummaryScreen
                   materialId={route.params?.materialId}
@@ -82,6 +102,12 @@ export const RootNavigator: React.FC = () => {
             />
             <Stack.Screen
               name="Quiz"
+              options={{
+                animation: 'slide_from_bottom',
+                animationDuration: 300,
+                presentation: 'modal',
+                gestureEnabled: true,
+              }}
               component={({ navigation, route }: any) => (
                 <QuizScreen
                   materialId={route.params?.materialId}
@@ -94,6 +120,11 @@ export const RootNavigator: React.FC = () => {
             />
             <Stack.Screen
               name="ConceptMap"
+              options={{
+                animation: 'slide_from_right',
+                animationDuration: 280,
+                gestureEnabled: true,
+              }}
               component={({ navigation, route }: any) => (
                 <ConceptMapScreen
                   materialId={route.params?.materialId}

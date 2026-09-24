@@ -9,8 +9,10 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeStore } from '../store/useThemeStore';
 import { useAuthStore } from '../store/useAuthStore';
+import { showThemedAlert } from '../store/useNotificationStore';
 import { spacing, borderRadius, shadows } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { Card } from '../components/Card';
@@ -63,6 +65,7 @@ const slides: Slide[] = [
 
 export const OnboardingScreen: React.FC = () => {
   const { colors } = useThemeStore();
+  const insets = useSafeAreaInsets();
   const { signInWithGoogle, signInAsGuest, isLoading, error, clearError } = useAuthStore();
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
 
@@ -78,7 +81,7 @@ export const OnboardingScreen: React.FC = () => {
     try {
       await signInWithGoogle();
     } catch (err: any) {
-      Alert.alert(
+      showThemedAlert(
         'Google Sign-In',
         err.message || 'Unable to complete Google Sign-In at this time. You can try the Demo mode below.',
         [{ text: 'OK', onPress: clearError }]
@@ -90,7 +93,7 @@ export const OnboardingScreen: React.FC = () => {
     try {
       await signInAsGuest('Campus Student');
     } catch (err: any) {
-      Alert.alert('Demo Sign-In', err.message || 'Unable to sign in as guest.');
+      showThemedAlert('Demo Sign-In', err.message || 'Unable to sign in as guest.');
     }
   };
 
@@ -119,7 +122,16 @@ export const OnboardingScreen: React.FC = () => {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.background,
+          paddingTop: Math.max(insets.top, spacing.lg),
+          paddingBottom: Math.max(insets.bottom, spacing.xl),
+        },
+      ]}
+    >
       {/* Top Header & Skip */}
       <View style={styles.topHeader}>
         <View style={styles.brandRow}>
@@ -243,8 +255,6 @@ export const OnboardingScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 56,
-    paddingBottom: 36,
     paddingHorizontal: spacing.lg,
     justifyContent: 'space-between',
   },

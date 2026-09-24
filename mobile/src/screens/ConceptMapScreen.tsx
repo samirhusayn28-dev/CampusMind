@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import Svg, { Line, Path, Rect, Text as SvgText, G, Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeStore } from '../store/useThemeStore';
 import { useContentStore } from '../store/useContentStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -19,6 +20,7 @@ import { useChatStore } from '../store/useChatStore';
 import { typography } from '../theme/typography';
 import { spacing, borderRadius } from '../theme/spacing';
 import { ConceptNode, ConceptEdge, ConceptMapData, StudyMaterial } from '../types/content';
+import { ThemedLoader } from '../components/ThemedLoader';
 
 interface ConceptMapScreenProps {
   onBack: () => void;
@@ -42,6 +44,7 @@ export const ConceptMapScreen: React.FC<ConceptMapScreenProps> = ({
   onNavigateToChat,
 }) => {
   const { colors, isDark } = useThemeStore();
+  const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const {
     activeMaterial,
@@ -198,31 +201,32 @@ export const ConceptMapScreen: React.FC<ConceptMapScreenProps> = ({
   // 1. Loading State
   if (isGeneratingConceptMap || isLocalLoading) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <View style={[styles.safeArea, { backgroundColor: colors.background, paddingTop: Math.max(insets.top, spacing.xl), paddingBottom: insets.bottom, justifyContent: 'center' }]}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-        <View style={styles.centerContainer}>
-          <View style={[styles.loadingBadge, { backgroundColor: colors.skyContainer }]}>
-            <Ionicons name="git-network-outline" size={34} color={colors.sky} />
-          </View>
-          <Text style={[styles.loadingHeader, { color: colors.textPrimary }]}>
-            Mapping Concepts
-          </Text>
-          <Text style={[styles.loadingSubtitle, { color: colors.textSecondary }]}>
-            CampusMind AI is analyzing structural dependencies, mechanisms, and key terms in{' '}
-            {currentMaterial?.title || 'your lecture'}...
-          </Text>
-          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: spacing.xl }} />
-        </View>
-      </SafeAreaView>
+        <ThemedLoader
+          title="Mapping Concepts"
+          stage={`Analyzing structural dependencies in ${currentMaterial?.title || 'your lecture'}...`}
+          stages={[
+            `Analyzing key topics in ${currentMaterial?.title || 'your lecture'}...`,
+            'Detecting parent-child topic hierarchies...',
+            'Computing semantic graph layout & connection edges...',
+            'Rendering interactive concept nodes...',
+          ]}
+          subtext="Building an interactive knowledge graph for visual learning."
+          icon="git-network-outline"
+          variant="sky"
+          size="large"
+        />
+      </View>
     );
   }
 
   // 2. Empty State
   if (!conceptMap || conceptMap.nodes.length === 0) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <View style={[styles.safeArea, { backgroundColor: colors.background, paddingBottom: insets.bottom }]}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-        <View style={styles.topBar}>
+        <View style={[styles.topBar, { paddingTop: Math.max(insets.top, spacing.md) }]}>
           <TouchableOpacity
             style={[styles.iconButton, { backgroundColor: colors.surfaceSubtle }]}
             onPress={onBack}
@@ -253,18 +257,18 @@ export const ConceptMapScreen: React.FC<ConceptMapScreenProps> = ({
             <Text style={styles.primaryActionBtnText}>Generate Concept Map</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   const lineStrokeColor = isDark ? '#3F3F46' : '#D1D5DB';
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <View style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       {/* Header */}
-      <View style={[styles.topBar, { borderBottomColor: colors.borderSubtle }]}>
+      <View style={[styles.topBar, { borderBottomColor: colors.borderSubtle, paddingTop: Math.max(insets.top, spacing.md) }]}>
         <TouchableOpacity
           style={[styles.iconButton, { backgroundColor: colors.surfaceSubtle }]}
           onPress={onBack}
@@ -452,6 +456,7 @@ export const ConceptMapScreen: React.FC<ConceptMapScreenProps> = ({
             {
               backgroundColor: colors.surface,
               borderColor: colors.borderSubtle,
+              paddingBottom: Math.max(insets.bottom, spacing.md),
             },
           ]}
         >
@@ -531,7 +536,7 @@ export const ConceptMapScreen: React.FC<ConceptMapScreenProps> = ({
           )}
         </View>
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 

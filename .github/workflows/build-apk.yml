@@ -70,6 +70,72 @@ jobs:
           cd mobile
           EXPO_NO_TELEMETRY=1 npx expo prebuild --platform android --no-install
 
+      - name: 🔑 Configure Release Keystore & Verify SHA-1
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          mkdir -p mobile/android/app
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "Using release keystore from GitHub Secrets (ANDROID_KEYSTORE_BASE64)"
+            echo "$KEYSTORE_BASE64" | base64 -d > mobile/android/app/campusmind-release.keystore
+          elif [ -f "mobile/keystore/campusmind-release.keystore" ]; then
+            echo "Using committed release keystore from mobile/keystore/campusmind-release.keystore"
+            cp mobile/keystore/campusmind-release.keystore mobile/android/app/campusmind-release.keystore
+          else
+            echo "❌ Error: Neither secret ANDROID_KEYSTORE_BASE64 nor mobile/keystore/campusmind-release.keystore found!"
+            exit 1
+          fi
+
+          echo "=========================================================="
+          echo "🔑 VERIFYING RELEASE KEYSTORE & PRINTING SHA-1 FINGERPRINT"
+          echo "=========================================================="
+          keytool -list -v -keystore mobile/android/app/campusmind-release.keystore -alias campusmind -storepass campusmind123
+
+          # Inject release signingConfig into mobile/android/app/build.gradle
+          node -e '
+            const fs = require("fs");
+            const gradlePath = "mobile/android/app/build.gradle";
+            let content = fs.readFileSync(gradlePath, "utf8");
+
+            const debugConfig = `        debug {
+            storeFile file(\x27debug.keystore\x27)
+            storePassword \x27android\x27
+            keyAlias \x27androiddebugkey\x27
+            keyPassword \x27android\x27
+        }`;
+
+            const releaseConfig = `        release {
+            storeFile file(\x27campusmind-release.keystore\x27)
+            storePassword \x27campusmind123\x27
+            keyAlias \x27campusmind\x27
+            keyPassword \x27campusmind123\x27
+        }`;
+
+            if (content.includes(debugConfig)) {
+              content = content.replace(debugConfig, debugConfig + "\n" + releaseConfig);
+            } else {
+              content = content.replace("signingConfigs {", "signingConfigs {\n" + releaseConfig);
+            }
+
+            const oldReleaseBlock = `        release {
+            // Caution! In production, you need to generate your own keystore file.
+            // see https://reactnative.dev/docs/signed-apk-android.
+            signingConfig signingConfigs.debug`;
+
+            const newReleaseBlock = `        release {
+            // Caution! In production, you need to generate your own keystore file.
+            // see https://reactnative.dev/docs/signed-apk-android.
+            signingConfig signingConfigs.release`;
+
+            if (content.includes(oldReleaseBlock)) {
+              content = content.replace(oldReleaseBlock, newReleaseBlock);
+            } else {
+              content = content.replace("signingConfig signingConfigs.debug\n            def enableShrinkResources", "signingConfig signingConfigs.release\n            def enableShrinkResources");
+            }
+
+            fs.writeFileSync(gradlePath, content);
+            console.log("✅ Successfully injected release signingConfig into build.gradle");
+          '
 
       - name: 🐘 Build Release APK with Gradle
         env:

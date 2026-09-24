@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeStore } from '../store/useThemeStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useContentStore } from '../store/useContentStore';
@@ -17,6 +18,8 @@ import { ContentType, StudyMaterial, TranslatedContent } from '../types/content'
 import { Card } from '../components/Card';
 import { Badge } from '../components/Badge';
 import { AudioPlayerBar } from '../components/AudioPlayerBar';
+import { ThemedLoader } from '../components/ThemedLoader';
+import { showThemedAlert } from '../store/useNotificationStore';
 import { speakText, stopSpeech, pauseSpeech, resumeSpeech } from '../services/speech';
 import { spacing, borderRadius, shadows } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -41,6 +44,7 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = ({
   onNavigateToConceptMap,
 }) => {
   const { colors } = useThemeStore();
+  const insets = useSafeAreaInsets();
   const user = useAuthStore((state) => state.user);
   const {
     activeMaterial,
@@ -90,7 +94,7 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = ({
       const userId = user?.uid || 'guest_user';
       await generateSummaryForMaterial(material.id, userId);
     } catch (err: any) {
-      Alert.alert('AI Error', err.message || 'Could not generate summary.');
+      showThemedAlert('AI Error', err.message || 'Could not generate summary.');
     }
   };
 
@@ -113,7 +117,7 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = ({
         const userId = user?.uid || 'guest_user';
         await translateMaterialSummary(material.id, lang, userId);
       } catch (err: any) {
-        Alert.alert('Translation Error', err.message || 'Could not translate summary.');
+        showThemedAlert('Translation Error', err.message || 'Could not translate summary.');
       }
     }
   };
@@ -184,7 +188,7 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = ({
     } catch (err: any) {
       setIsPlayingAudio(false);
       setIsAudioPaused(false);
-      Alert.alert('Speech Error', err.message || 'Could not start speech playback.');
+      showThemedAlert('Speech Error', err.message || 'Could not start speech playback.');
     }
   };
 
@@ -238,7 +242,7 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = ({
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Top Header */}
-      <View style={[styles.topBar, { borderBottomColor: colors.borderSubtle }]}>
+      <View style={[styles.topBar, { borderBottomColor: colors.borderSubtle, paddingTop: Math.max(insets.top, spacing.md) }]}>
         <TouchableOpacity
           style={[styles.iconButton, { backgroundColor: colors.surfaceSubtle }]}
           onPress={() => {
@@ -256,7 +260,10 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = ({
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom + spacing.xl, spacing.massive) }]}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Title & Metadata */}
         <Text style={[styles.title, { color: colors.textPrimary }]}>
           {language !== 'en' && translation?.title ? translation.title : material.title}
@@ -376,44 +383,60 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = ({
         {/* Translation Loading State */}
         {isTranslating && (
           <Card variant="sage" style={styles.translatingCard}>
-            <ActivityIndicator color={colors.primary} size="small" />
-            <Text style={[styles.translatingText, { color: colors.onPrimaryContainer }]}>
-              Translating summary into {language === 'roman_urdu' ? 'Roman Urdu' : 'Urdu'} using Groq AI...
-            </Text>
+            <ThemedLoader
+              stage={`Translating summary into ${language === 'roman_urdu' ? 'Roman Urdu' : 'Urdu'} using Groq AI...`}
+              icon="language-outline"
+              variant="primary"
+              size="small"
+            />
           </Card>
         )}
 
         {/* If no summary yet: Call Groq to generate */}
         {!summary ? (
-          <Card variant="sage" style={styles.generatePromptCard}>
-            <View style={[styles.aiIconWrapper, { backgroundColor: colors.surface }]}>
-              <Ionicons name="sparkles" size={28} color={colors.primary} />
-            </View>
-            <Text style={[styles.generateTitle, { color: colors.onPrimaryContainer }]}>
-              Generate AI Study Summary
-            </Text>
-            <Text style={[styles.generateDesc, { color: colors.textSecondary }]}>
-              Groq AI will analyze the extracted text, produce 5–10 key takeaways, and organize structured topic headings.
-            </Text>
+          isSummarizing ? (
+            <Card variant="sage" style={styles.generatePromptCard}>
+              <ThemedLoader
+                title="Generating AI Summary"
+                stage="Analyzing lecture content with Groq AI..."
+                stages={[
+                  'Analyzing lecture text and concepts...',
+                  'Synthesizing 5–10 core takeaways...',
+                  'Structuring topic breakdown & high-yield exam tips...',
+                  'Formatting bilingual knowledge points...',
+                ]}
+                subtext="Groq Llama 3 is distilling high-yield study notes."
+                icon="sparkles"
+                variant="primary"
+                size="medium"
+              />
+            </Card>
+          ) : (
+            <Card variant="sage" style={styles.generatePromptCard}>
+              <View style={[styles.aiIconWrapper, { backgroundColor: colors.surface }]}>
+                <Ionicons name="sparkles" size={28} color={colors.primary} />
+              </View>
+              <Text style={[styles.generateTitle, { color: colors.onPrimaryContainer }]}>
+                Generate AI Study Summary
+              </Text>
+              <Text style={[styles.generateDesc, { color: colors.textSecondary }]}>
+                Groq AI will analyze the extracted text, produce 5–10 key takeaways, and organize structured topic headings.
+              </Text>
 
-            <TouchableOpacity
-              style={[styles.primaryActionBtn, { backgroundColor: colors.primary }]}
-              onPress={handleGenerateSummary}
-              disabled={isSummarizing}
-              activeOpacity={0.85}
-            >
-              {isSummarizing ? (
-                <ActivityIndicator color={colors.onPrimary} size="small" />
-              ) : (
+              <TouchableOpacity
+                style={[styles.primaryActionBtn, { backgroundColor: colors.primary }]}
+                onPress={handleGenerateSummary}
+                activeOpacity={0.85}
+              >
                 <View style={styles.btnContentRow}>
                   <Ionicons name="sparkles" size={18} color={colors.onPrimary} />
                   <Text style={[styles.primaryActionText, { color: colors.onPrimary }]}>
                     Summarize with Groq AI
                   </Text>
                 </View>
-              )}
-            </TouchableOpacity>
-          </Card>
+              </TouchableOpacity>
+            </Card>
+          )
         ) : (
           <>
             {/* Executive Overview Card */}
@@ -679,7 +702,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    paddingTop: 52,
+    paddingTop: spacing.md,
     paddingBottom: spacing.md,
     borderBottomWidth: 1,
   },

@@ -8,8 +8,10 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeStore } from '../store/useThemeStore';
 import { useAuthStore } from '../store/useAuthStore';
+import { showThemedAlert } from '../store/useNotificationStore';
 import { Card } from '../components/Card';
 import { Badge } from '../components/Badge';
 import { spacing, borderRadius, shadows } from '../theme/spacing';
@@ -17,13 +19,14 @@ import { typography } from '../theme/typography';
 
 export const AuthScreen: React.FC = () => {
   const { colors } = useThemeStore();
+  const insets = useSafeAreaInsets();
   const { signInWithGoogle, signInAsGuest, isLoading, error, clearError } = useAuthStore();
 
   const handleGoogleSignIn = async () => {
     try {
       await signInWithGoogle();
     } catch (err: any) {
-      Alert.alert(
+      showThemedAlert(
         'Google Sign-In',
         err.message || 'Unable to complete Google Sign-In at this moment.',
         [{ text: 'OK', onPress: clearError }]
@@ -35,12 +38,21 @@ export const AuthScreen: React.FC = () => {
     try {
       await signInAsGuest('Campus Student');
     } catch (err: any) {
-      Alert.alert('Demo Sign-In', err.message || 'Unable to sign in as guest.');
+      showThemedAlert('Demo Sign-In', err.message || 'Unable to sign in as guest.');
     }
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.background,
+          paddingTop: Math.max(insets.top, spacing.xl),
+          paddingBottom: Math.max(insets.bottom, spacing.xl),
+        },
+      ]}
+    >
       <View style={styles.content}>
         {/* Brand Header */}
         <View style={styles.brandHeader}>

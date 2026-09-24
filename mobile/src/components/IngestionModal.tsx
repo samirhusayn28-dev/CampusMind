@@ -14,7 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import {
   useAudioRecorder,
   requestRecordingPermissionsAsync,
@@ -28,6 +28,8 @@ import { useContentStore } from '../store/useContentStore';
 import { ContentType } from '../types/content';
 import { Card } from './Card';
 import { Badge } from './Badge';
+import { ThemedLoader } from './ThemedLoader';
+import { showThemedAlert } from '../store/useNotificationStore';
 import { spacing, borderRadius, shadows } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
@@ -101,16 +103,16 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
       const userId = user?.uid || 'guest_user';
       await ingestPdf(base64, file.name, userId, selectedSubject);
       onClose();
-      Alert.alert('Success', `"${file.name}" has been processed and saved!`);
+      showThemedAlert('Success', `"${file.name}" has been processed and saved!`);
     } catch (err: any) {
-      Alert.alert('PDF Upload Error', err.message || 'Could not process PDF document.');
+      showThemedAlert('PDF Upload Error', err.message || 'Could not process PDF document.');
     }
   };
 
   // Handle YouTube Ingestion
   const handleIngestYouTube = async () => {
     if (!youtubeUrl.trim()) {
-      Alert.alert('Enter URL', 'Please paste a valid YouTube video URL.');
+      showThemedAlert('Enter URL', 'Please paste a valid YouTube video URL.');
       return;
     }
 
@@ -119,9 +121,9 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
       await ingestYouTube(youtubeUrl.trim(), userId, selectedSubject);
       setYoutubeUrl('');
       onClose();
-      Alert.alert('Success', 'YouTube lecture transcript extracted and saved!');
+      showThemedAlert('Success', 'YouTube lecture transcript extracted and saved!');
     } catch (err: any) {
-      Alert.alert('YouTube Error', err.message || 'Could not extract YouTube transcript.');
+      showThemedAlert('YouTube Error', err.message || 'Could not extract YouTube transcript.');
     }
   };
 
@@ -130,7 +132,7 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
     try {
       const permission = await requestRecordingPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('Microphone Access', 'Permission to access microphone is required for live recording.');
+        showThemedAlert('Microphone Access', 'Permission to access microphone is required for live recording.');
         return;
       }
 
@@ -149,7 +151,7 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
         setRecordDuration((prev) => prev + 1);
       }, 1000);
     } catch (err: any) {
-      Alert.alert('Recording Error', err.message || 'Could not start audio recording.');
+      showThemedAlert('Recording Error', err.message || 'Could not start audio recording.');
     }
   };
 
@@ -171,9 +173,9 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
       await ingestAudio(base64, recordDuration, userId, selectedSubject);
       setRecordDuration(0);
       onClose();
-      Alert.alert('Success', 'Lecture audio transcribed via Groq Whisper and saved!');
+      showThemedAlert('Success', 'Lecture audio transcribed via Groq Whisper and saved!');
     } catch (err: any) {
-      Alert.alert('Audio Error', err.message || 'Could not process audio recording.');
+      showThemedAlert('Audio Error', err.message || 'Could not process audio recording.');
     }
   };
 
@@ -183,13 +185,13 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
       if (useCamera) {
         const camPerm = await ImagePicker.requestCameraPermissionsAsync();
         if (!camPerm.granted) {
-          Alert.alert('Camera Access', 'Camera permission is required to capture handwritten notes.');
+          showThemedAlert('Camera Access', 'Camera permission is required to capture handwritten notes.');
           return;
         }
       } else {
         const libPerm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!libPerm.granted) {
-          Alert.alert('Library Access', 'Photo library permission is required to select handwritten notes.');
+          showThemedAlert('Library Access', 'Photo library permission is required to select handwritten notes.');
           return;
         }
       }
@@ -221,9 +223,9 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
       const userId = user?.uid || 'guest_user';
       await ingestOcr(base64, userId, selectedSubject);
       onClose();
-      Alert.alert('Success', 'Handwritten notes OCR completed and saved!');
+      showThemedAlert('Success', 'Handwritten notes OCR completed and saved!');
     } catch (err: any) {
-      Alert.alert('OCR Error', err.message || 'Could not extract text from notes photo.');
+      showThemedAlert('OCR Error', err.message || 'Could not extract text from notes photo.');
     }
   };
 
@@ -471,13 +473,20 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
           {/* Ingestion Processing Overlay */}
           {isIngesting && (
             <View style={[styles.loadingOverlay, { backgroundColor: colors.surfaceElevated }]}>
-              <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={[styles.loadingStageText, { color: colors.textPrimary }]}>
-                {ingestionStage || 'Processing study material...'}
-              </Text>
-              <Text style={[styles.loadingSubtext, { color: colors.textSecondary }]}>
-                Cloud serverless pipeline running safely in background.
-              </Text>
+              <ThemedLoader
+                title="Processing Lecture"
+                stage={ingestionStage || 'Extracting and processing study material...'}
+                stages={[
+                  ingestionStage || 'Extracting lecture content...',
+                  'Validating document format & text fidelity...',
+                  'Structuring knowledge nodes for Groq AI...',
+                  'Finishing ingestion pipeline...',
+                ]}
+                subtext="Serverless cloud pipeline running safely in background."
+                icon="cloud-upload-outline"
+                variant="primary"
+                size="medium"
+              />
             </View>
           )}
         </View>

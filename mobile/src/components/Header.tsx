@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../store/useThemeStore';
 import { spacing, borderRadius } from '../theme/spacing';
@@ -19,9 +20,10 @@ export const Header: React.FC<HeaderProps> = ({
   showThemeToggle = true,
 }) => {
   const { colors, isDark, toggleTheme } = useThemeStore();
+  const insets = useSafeAreaInsets();
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, spacing.md) }]}>
       <View style={styles.textColumn}>
         <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>
         {subtitle && (

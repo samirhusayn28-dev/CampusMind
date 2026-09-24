@@ -2,7 +2,7 @@
   "expo": {
     "name": "CampusMind",
     "slug": "campusmind",
-    "version": "1.0.0",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "campusmind",
@@ -10,7 +10,12 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#FBF9F5"
+      "backgroundColor": "#FBF9F5",
+      "dark": {
+        "image": "./assets/splash-icon-dark.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#161816"
+      }
     },
     "ios": {
       "supportsTablet": true,
@@ -19,6 +24,7 @@
     },
     "android": {
       "package": "com.campusmind.app",
+      "versionCode": 5,
       "adaptiveIcon": {
         "backgroundColor": "#FBF9F5",
         "foregroundImage": "./assets/android-icon-foreground.png"
@@ -41,7 +47,8 @@
         {
           "iosUrlScheme": "com.googleusercontent.apps.220472508393-m63rfu8n1ul1l613u1i7oblae4n3moav"
         }
-      ]
+      ],
+      "expo-splash-screen"
     ]
   }
 }

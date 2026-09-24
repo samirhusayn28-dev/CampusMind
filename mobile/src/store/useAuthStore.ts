@@ -10,6 +10,8 @@ import {
   syncUserProfileToFirestore,
   configureGoogleSignIn,
 } from '../services/firebase';
+import { loadCloudSettings, loadCloudHabits } from '../services/sync';
+import { useHabitStore } from './useHabitStore';
 
 const ONBOARDING_STORAGE_KEY = '@campusmind_onboarding_completed_v1';
 const GUEST_STORAGE_KEY = '@campusmind_guest_user';
@@ -66,6 +68,8 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
         if (firebaseUser) {
           try {
             const profile = await syncUserProfileToFirestore(firebaseUser);
+            loadCloudSettings(profile.uid).catch(() => {});
+            loadCloudHabits(profile.uid, (data) => useHabitStore.getState().setHabitStateFromCloud(data)).catch(() => {});
             set({
               user: profile,
               isAuthenticated: true,
@@ -99,6 +103,8 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
     try {
       const profile = await signInWithGoogleNative();
       await AsyncStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
+      loadCloudSettings(profile.uid).catch(() => {});
+      loadCloudHabits(profile.uid, (data) => useHabitStore.getState().setHabitStateFromCloud(data)).catch(() => {});
       set({
         user: profile,
         isAuthenticated: true,

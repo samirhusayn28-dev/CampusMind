@@ -15,6 +15,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useThemeStore } from '../store/useThemeStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useContentStore } from '../store/useContentStore';
+import { showThemedAlert } from '../store/useNotificationStore';
 import { ContentType, StudyMaterial } from '../types/content';
 import { Header } from '../components/Header';
 import { Card } from '../components/Card';
@@ -108,7 +109,7 @@ export const LibraryScreen: React.FC = () => {
   };
 
   const handleDelete = (item: StudyMaterial) => {
-    Alert.alert(
+    showThemedAlert(
       'Delete Material',
       `Are you sure you want to remove "${item.title}"?`,
       [
@@ -119,6 +120,7 @@ export const LibraryScreen: React.FC = () => {
           onPress: async () => {
             const userId = user?.uid || 'guest_user';
             await deleteMaterial(item.id, userId);
+            showThemedAlert('Deleted', `"${item.title}" has been removed.`);
           },
         },
       ]
@@ -126,7 +128,7 @@ export const LibraryScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <View style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       <Header
@@ -499,7 +501,7 @@ export const LibraryScreen: React.FC = () => {
 
       {/* Ingestion Modal */}
       <IngestionModal visible={modalVisible} onClose={() => setModalVisible(false)} />
-    </SafeAreaView>
+    </View>
   );
 };
 

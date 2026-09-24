@@ -11,12 +11,14 @@ import {
   Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeStore } from '../store/useThemeStore';
 import { useContentStore } from '../store/useContentStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { typography } from '../theme/typography';
 import { spacing, borderRadius } from '../theme/spacing';
 import { QuizQuestion } from '../types/content';
+import { ThemedLoader } from '../components/ThemedLoader';
 
 interface QuizScreenProps {
   onBack: () => void;
@@ -30,6 +32,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
   onNavigateToSummary,
 }) => {
   const { colors, isDark } = useThemeStore();
+  const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const {
     activeMaterial,
@@ -196,31 +199,32 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
   // 1. Loading state
   if (isGeneratingQuiz || isLocalLoading) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <View style={[styles.safeArea, { backgroundColor: colors.background, paddingTop: Math.max(insets.top, spacing.xl), paddingBottom: insets.bottom, justifyContent: 'center' }]}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-        <View style={styles.centerContainer}>
-          <View style={[styles.loadingBadge, { backgroundColor: colors.peachContainer }]}>
-            <Ionicons name="sparkles" size={32} color={colors.peach} />
-          </View>
-          <Text style={[styles.loadingHeader, { color: colors.textPrimary }]}>
-            Crafting Your Quiz
-          </Text>
-          <Text style={[styles.loadingSubtitle, { color: colors.textSecondary }]}>
-            CampusMind AI is formulating high-yield active recall questions from{' '}
-            {currentMaterial?.title || 'your lecture'}...
-          </Text>
-          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: spacing.xl }} />
-        </View>
-      </SafeAreaView>
+        <ThemedLoader
+          title="Crafting Your Quiz"
+          stage={`Formulating high-yield questions from ${currentMaterial?.title || 'your lecture'}...`}
+          stages={[
+            `Analyzing key concepts in ${currentMaterial?.title || 'your lecture'}...`,
+            'Formulating active recall questions & multiple choices...',
+            'Structuring realistic distractors and edge cases...',
+            'Writing comprehensive explanations & citations...',
+          ]}
+          subtext="Groq AI is personalizing questions to maximize retention."
+          icon="sparkles"
+          variant="peach"
+          size="large"
+        />
+      </View>
     );
   }
 
   // 2. Empty or error state
   if (!questions || questions.length === 0) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <View style={[styles.safeArea, { backgroundColor: colors.background, paddingBottom: insets.bottom }]}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-        <View style={styles.topBar}>
+        <View style={[styles.topBar, { paddingTop: Math.max(insets.top, spacing.md) }]}>
           <TouchableOpacity
             style={[styles.iconButton, { backgroundColor: colors.surfaceSubtle }]}
             onPress={onBack}
@@ -251,7 +255,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
             <Text style={styles.primaryActionBtnText}>Generate Quiz Now</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -260,9 +264,9 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
     const feedback = getScoreFeedback();
 
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <View style={[styles.safeArea, { backgroundColor: colors.background }]}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-        <View style={styles.topBar}>
+        <View style={[styles.topBar, { paddingTop: Math.max(insets.top, spacing.md) }]}>
           <TouchableOpacity
             style={[styles.iconButton, { backgroundColor: colors.surfaceSubtle }]}
             onPress={onBack}
@@ -275,7 +279,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
         </View>
 
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom + spacing.xl, spacing.massive) }]}
           showsVerticalScrollIndicator={false}
         >
           {/* Main Score Card */}
@@ -430,7 +434,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
             </TouchableOpacity>
           </View>
         </ScrollView>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -444,11 +448,11 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
   const optionLetters = ['A', 'B', 'C', 'D'];
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <View style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       {/* Header Bar */}
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { paddingTop: Math.max(insets.top, spacing.md) }]}>
         <TouchableOpacity
           style={[styles.iconButton, { backgroundColor: colors.surfaceSubtle }]}
           onPress={onBack}
@@ -487,7 +491,10 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.questionScrollContent}
+        contentContainerStyle={[
+          styles.questionScrollContent,
+          { paddingBottom: Math.max(insets.bottom + spacing.xxl, spacing.massive) },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Question Prompt Card */}
@@ -684,7 +691,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
           </Animated.View>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 

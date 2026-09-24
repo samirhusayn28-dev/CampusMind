@@ -18,6 +18,7 @@ import { Header } from '../components/Header';
 import { Card } from '../components/Card';
 import { Badge } from '../components/Badge';
 import { IngestionModal } from '../components/IngestionModal';
+import { HabitTrackerCard } from '../components/HabitTrackerCard';
 import { isDueForReview, getReviewBadge } from '../services/spacedRepetition';
 import { spacing, borderRadius } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -123,7 +124,7 @@ export const HomeScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <View style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       <Header
@@ -135,27 +136,8 @@ export const HomeScreen: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Warm Encouraging Study Streak Card */}
-        <Card variant="sage" style={styles.streakCard}>
-          <View style={styles.cardHeaderRow}>
-            <View style={[styles.streakBadgePill, { backgroundColor: colors.primary }]}>
-              <Ionicons name="flame" size={16} color={colors.onPrimary} style={{ marginRight: 4 }} />
-              <Text style={[styles.streakBadgeText, { color: colors.onPrimary }]}>
-                {streak} {streak === 1 ? 'Day Streak' : 'Days Streak'}
-              </Text>
-            </View>
-            <Ionicons name="sparkles" size={18} color={colors.primary} />
-          </View>
-
-          <Text style={[styles.streakTitle, { color: colors.onPrimaryContainer }]}>
-            {streak > 1
-              ? 'Consistency beats cramming!'
-              : 'Welcome! Every study session counts 🌱'}
-          </Text>
-          <Text style={[styles.streakSubtext, { color: colors.textSecondary }]}>
-            Active recall and spaced reviews lock concepts into your long-term memory.
-          </Text>
-        </Card>
+        {/* Full Comprehensive Habit Tracker Card */}
+        <HabitTrackerCard />
 
         {/* Quick Learning Stats Row */}
         <View style={styles.statsRow}>
@@ -311,7 +293,7 @@ export const HomeScreen: React.FC = () => {
 
       {/* Ingestion Modal */}
       <IngestionModal visible={modalVisible} onClose={() => setModalVisible(false)} />
-    </SafeAreaView>
+    </View>
   );
 };
 
