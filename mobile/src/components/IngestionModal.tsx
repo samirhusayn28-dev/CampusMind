@@ -15,7 +15,13 @@ import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
-import { Audio } from 'expo-av';
+import {
+  useAudioRecorder,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  RecordingPresets,
+  type AudioRecorder,
+} from 'expo-audio';
 import { useThemeStore } from '../store/useThemeStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useContentStore } from '../store/useContentStore';
@@ -55,8 +61,8 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
   // YouTube State
   const [youtubeUrl, setYoutubeUrl] = useState('');
 
-  // Audio Recording State
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  // Audio Recording State — using expo-audio recorder
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [isRecording, setIsRecording] = useState(false);
   const [recordDuration, setRecordDuration] = useState(0);
   const timerRef = useRef<any>(null);
@@ -71,11 +77,11 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      if (recording) {
-        recording.stopAndUnloadAsync().catch(() => {});
+      if (isRecording) {
+        recorder.stop().catch(() => {});
       }
     };
-  }, [recording]);
+  }, [isRecording, recorder]);
 
   // Handle PDF Picking
   const handlePickPdf = async () => {
@@ -122,22 +128,20 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
   // Audio Recording Handlers
   const startRecording = async () => {
     try {
-      const permission = await Audio.requestPermissionsAsync();
+      const permission = await requestRecordingPermissionsAsync();
       if (!permission.granted) {
         Alert.alert('Microphone Access', 'Permission to access microphone is required for live recording.');
         return;
       }
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
       });
 
-      const { recording: newRecording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
+      await recorder.prepareToRecordAsync();
+      recorder.record();
 
-      setRecording(newRecording);
       setIsRecording(true);
       setRecordDuration(0);
 
@@ -150,15 +154,12 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
   };
 
   const stopAndUploadRecording = async () => {
-    if (!recording) return;
-
     try {
       if (timerRef.current) clearInterval(timerRef.current);
       setIsRecording(false);
 
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      setRecording(null);
+      await recorder.stop();
+      const uri = recorder.uri;
 
       if (!uri) throw new Error('Recording URI is missing');
 

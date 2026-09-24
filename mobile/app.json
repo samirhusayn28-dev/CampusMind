@@ -28,7 +28,12 @@
     },
     "plugins": [
       "expo-font",
-      "expo-av",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "CampusMind needs microphone access to record live lectures."
+        }
+      ],
       "expo-image-picker",
       "expo-document-picker",
       [
