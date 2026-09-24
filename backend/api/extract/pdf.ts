@@ -32,7 +32,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .replace(/\n{3,}/g, '\n\n')
       .trim();
 
-    const wordCount = cleanText ? cleanText.split(/\s+/).length : 0;
+    if (!cleanText || cleanText.length < 20) {
+      return res.status(400).json({
+        error: 'No readable text could be extracted from this PDF. If it contains scanned pages, please take photos and use Camera Scan.',
+      });
+    }
+
+    const wordCount = cleanText.split(/\s+/).length;
     const numPages = textResult.pages?.length || 1;
 
     return res.status(200).json({

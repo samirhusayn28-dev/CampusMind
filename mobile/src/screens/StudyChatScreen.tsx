@@ -7,11 +7,12 @@ import {
   TextInput,
   TouchableOpacity,
   SafeAreaView,
-  KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Animated,
+  Keyboard,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../store/useThemeStore';
 import { useContentStore } from '../store/useContentStore';
@@ -66,6 +67,18 @@ export const StudyChatScreen: React.FC = () => {
     return () => clearTimeout(timer);
   }, [messages.length, isSending]);
 
+  useEffect(() => {
+    // Auto-scroll when keyboard appears so messages stay visible
+    const showSub = Keyboard.addListener('keyboardDidShow', () => {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 50);
+    });
+    return () => {
+      showSub.remove();
+    };
+  }, []);
+
   const handleSend = async (textToSend?: string) => {
     const text = (textToSend || inputText).trim();
     if (!text || isSending) return;
@@ -103,8 +116,8 @@ export const StudyChatScreen: React.FC = () => {
     <View style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
+        behavior="padding"
+        keyboardVerticalOffset={0}
       >
         {/* Header */}
         <Header
@@ -196,6 +209,8 @@ export const StudyChatScreen: React.FC = () => {
           ref={scrollViewRef}
           contentContainerStyle={styles.messageList}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           {/* Active Context Banner */}
           {currentMaterial && (
@@ -401,6 +416,11 @@ export const StudyChatScreen: React.FC = () => {
             placeholderTextColor={colors.textTertiary}
             value={inputText}
             onChangeText={setInputText}
+            onFocus={() => {
+              setTimeout(() => {
+                scrollViewRef.current?.scrollToEnd({ animated: true });
+              }, 120);
+            }}
             multiline
             maxLength={600}
           />

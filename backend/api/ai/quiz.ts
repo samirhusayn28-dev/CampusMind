@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Groq from 'groq-sdk';
+import { GROQ_MODELS, extractJson } from '../_utils/ai.js';
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY || 'gsk_mock_preview_key',
@@ -77,23 +78,37 @@ ${truncatedContent}
 
 Please generate ${questionCount} multiple choice practice questions in the specified JSON format.`;
 
-    const chatCompletion = await groq.chat.completions.create({
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      model: 'llama-3.3-70b-versatile',
-      temperature: 0.3,
-      response_format: { type: 'json_object' },
-    });
+    let questions: any[] = [];
 
-    const content = chatCompletion.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('Groq returned empty response');
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const chatCompletion = await groq.chat.completions.create({
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          model: GROQ_MODELS.text,
+          temperature: attempt === 1 ? 0.3 : 0.1,
+          response_format: { type: 'json_object' },
+        });
+
+        const content = chatCompletion.choices[0]?.message?.content;
+        if (!content) {
+          throw new Error('Groq returned empty response');
+        }
+
+        const parsedJson = extractJson(content);
+        questions = parsedJson.questions || [];
+        if (Array.isArray(questions) && questions.length > 0) {
+          break;
+        }
+      } catch (err: any) {
+        console.warn(`[Quiz] Attempt ${attempt} failed: ${err.message}`);
+        if (attempt === 2 && questions.length === 0) {
+          throw err;
+        }
+      }
     }
-
-    const parsedJson = JSON.parse(content);
-    const questions = parsedJson.questions || [];
 
     return res.status(200).json({
       success: true,

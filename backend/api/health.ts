@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { GROQ_MODELS } from './_utils/ai.js';
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
@@ -9,7 +10,12 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     status: 'ok',
     service: 'CampusMind API',
     timestamp: new Date().toISOString(),
-    version: '1.0.0',
+    version: '1.0.6',
+    models: {
+      text: GROQ_MODELS.text,
+      vision: GROQ_MODELS.vision,
+      stt: GROQ_MODELS.stt,
+    },
     integrations: {
       groq: Boolean(process.env.GROQ_API_KEY && !process.env.GROQ_API_KEY.includes('mock')),
       pinecone: Boolean(process.env.PINECONE_API_KEY && !process.env.PINECONE_API_KEY.includes('mock')),

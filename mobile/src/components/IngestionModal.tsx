@@ -10,6 +10,7 @@ import {
   ScrollView,
   Platform,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -351,7 +352,11 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
-        <View style={[styles.modalCard, { backgroundColor: colors.background }]}>
+        <KeyboardAvoidingView
+          behavior="padding"
+          style={{ width: '100%' }}
+        >
+          <View style={[styles.modalCard, { backgroundColor: colors.background }]}>
           {/* Header */}
           <View style={styles.modalHeader}>
             <View style={{ flex: 1 }}>
@@ -379,6 +384,8 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
               style={styles.reviewScroll}
               contentContainerStyle={styles.reviewScrollContent}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
             >
               {/* Title Input */}
               <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>Title</Text>
@@ -577,7 +584,13 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
               </ScrollView>
 
               {/* Tab Content */}
-              <View style={styles.bodyContent}>
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={styles.bodyContent}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                showsVerticalScrollIndicator={false}
+              >
                 {/* 1. PDF Tab */}
                 {activeTab === 'pdf' && (
                   <Card variant="surface" style={styles.tabContentCard}>
@@ -733,7 +746,7 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
                     </View>
                   </Card>
                 )}
-              </View>
+              </ScrollView>
             </>
           )}
 
@@ -776,7 +789,8 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
               />
             </View>
           )}
-        </View>
+          </View>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );

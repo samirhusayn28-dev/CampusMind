@@ -26,6 +26,7 @@ export const TabNavigator: React.FC = () => {
       screenOptions={({ route }) => ({
         headerShown: false,
         animation: 'fade',
+        tabBarHideOnKeyboard: true,
         tabBarShowLabel: true,
         tabBarActiveTintColor: colors.tabBarActive,
         tabBarInactiveTintColor: colors.tabBarInactive,

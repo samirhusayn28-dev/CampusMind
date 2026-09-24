@@ -137,6 +137,8 @@ export const HomeScreen: React.FC = () => {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         {/* Full Comprehensive Habit Tracker Card */}
         <HabitTrackerCard />

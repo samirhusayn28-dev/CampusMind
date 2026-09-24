@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import vision from '@google-cloud/vision';
 import Groq from 'groq-sdk';
+import { GROQ_MODELS, stripReasoning } from '../_utils/ai.js';
 
 // Optional Vision Client for Service Account credentials
 let visionClient: any = null;
@@ -106,7 +107,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!extractedText && process.env.GROQ_API_KEY && !process.env.GROQ_API_KEY.includes('mock')) {
       try {
         const visionResponse = await groq.chat.completions.create({
-          model: 'llama-3.2-11b-vision-preview',
+          model: GROQ_MODELS.vision,
           messages: [
             {
               role: 'user',
@@ -128,7 +129,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           max_tokens: 2048,
         });
 
-        extractedText = visionResponse.choices[0]?.message?.content?.trim() || '';
+        const rawContent = visionResponse.choices[0]?.message?.content || '';
+        extractedText = stripReasoning(rawContent).trim();
       } catch (visionErr: any) {
         console.warn('[Groq Vision OCR failed]:', visionErr.message);
       }

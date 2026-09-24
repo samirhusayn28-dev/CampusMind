@@ -3,6 +3,7 @@ import Groq from 'groq-sdk';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { GROQ_MODELS } from '../_utils/ai.js';
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY || 'gsk_mock_preview_key',
@@ -36,12 +37,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const transcription = await groq.audio.transcriptions.create({
         file: fs.createReadStream(tempFilePath),
-        model: 'whisper-large-v3',
+        model: GROQ_MODELS.stt,
         response_format: 'verbose_json',
       });
 
       const text = transcription.text ? transcription.text.trim() : '';
-      const wordCount = text ? text.split(/\s+/).length : 0;
+      if (!text || text.length === 0) {
+        return res.status(400).json({
+          error: 'No spoken words were detected in this audio recording. Please speak clearly into the microphone and try again.',
+        });
+      }
+
+      const wordCount = text.split(/\s+/).length;
       const durationSeconds = (transcription as any).duration || 0;
 
       return res.status(200).json({

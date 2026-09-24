@@ -146,6 +146,8 @@ export const SettingsScreen: React.FC = () => {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         {/* Profile Card */}
         <Card variant="surface" style={styles.profileCard}>
@@ -505,7 +507,7 @@ export const SettingsScreen: React.FC = () => {
           <View style={styles.aboutHeader}>
             <Ionicons name="school" size={24} color={colors.primary} />
             <Text style={[styles.aboutTitle, { color: colors.textPrimary }]}>
-              CampusMind Version 1.0.5
+              CampusMind
             </Text>
           </View>
           <Text style={[styles.aboutText, { color: colors.textSecondary }]}>

@@ -259,7 +259,12 @@ export const LibraryScreen: React.FC = () => {
 
       {/* 1. SUBJECT FOLDERS TAB */}
       {activeTab === 'folders' && (
-        <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
           {subjectGroups.length === 0 ? (
             <Card variant="surface" style={styles.emptyCard}>
               <View style={[styles.emptyIconCircle, { backgroundColor: colors.lavenderContainer }]}>
@@ -327,7 +332,12 @@ export const LibraryScreen: React.FC = () => {
 
       {/* 2. DUE FOR REVISION TAB */}
       {activeTab === 'reviews' && (
-        <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
           {dueMaterials.length === 0 ? (
             <Card variant="surface" style={styles.emptyCard}>
               <View style={[styles.emptyIconCircle, { backgroundColor: colors.primaryContainer }]}>
@@ -415,7 +425,12 @@ export const LibraryScreen: React.FC = () => {
 
       {/* 3. ALL MATERIALS TAB */}
       {activeTab === 'all' && (
-        <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
           {filteredMaterials.length === 0 ? (
             <Card variant="surface" style={styles.emptyCard}>
               <View style={[styles.emptyIconCircle, { backgroundColor: colors.primaryContainer }]}>

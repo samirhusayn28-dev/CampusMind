@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Groq from 'groq-sdk';
 import { Pinecone } from '@pinecone-database/pinecone';
+import { GROQ_MODELS, stripReasoning } from '../_utils/ai.js';
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY || 'gsk_mock_preview_key',
@@ -279,12 +280,13 @@ ${contextSnippets ? contextSnippets : '(No excerpts provided. Please provide gen
         ...formattedHistory,
         { role: 'user', content: message },
       ],
-      model: 'llama-3.3-70b-versatile',
+      model: GROQ_MODELS.text,
       temperature: 0.4,
       max_tokens: 1024,
     });
 
-    const reply = chatCompletion.choices[0]?.message?.content || 'I could not generate a response.';
+    const rawReply = chatCompletion.choices[0]?.message?.content || '';
+    const reply = stripReasoning(rawReply) || 'I could not generate a response.';
 
     return res.status(200).json({
       success: true,

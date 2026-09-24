@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Groq from 'groq-sdk';
+import { GROQ_MODELS, extractJson } from '../_utils/ai.js';
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY || 'gsk_mock_preview_key',
@@ -102,24 +103,39 @@ ${truncated}
 
 Please construct the structured concept map graph in the specified JSON format.`;
 
-    const chatCompletion = await groq.chat.completions.create({
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      model: 'llama-3.3-70b-versatile',
-      temperature: 0.3,
-      response_format: { type: 'json_object' },
-    });
+    let nodes: ConceptNode[] = [];
+    let edges: ConceptEdge[] = [];
 
-    const content = chatCompletion.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('Groq returned empty response');
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const chatCompletion = await groq.chat.completions.create({
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          model: GROQ_MODELS.text,
+          temperature: attempt === 1 ? 0.3 : 0.1,
+          response_format: { type: 'json_object' },
+        });
+
+        const content = chatCompletion.choices[0]?.message?.content;
+        if (!content) {
+          throw new Error('Groq returned empty response');
+        }
+
+        const parsedJson = extractJson(content);
+        nodes = parsedJson.nodes || [];
+        edges = parsedJson.edges || [];
+        if (Array.isArray(nodes) && nodes.length > 0) {
+          break;
+        }
+      } catch (err: any) {
+        console.warn(`[Concept Map] Attempt ${attempt} failed: ${err.message}`);
+        if (attempt === 2 && nodes.length === 0) {
+          throw err;
+        }
+      }
     }
-
-    const parsedJson = JSON.parse(content);
-    const nodes: ConceptNode[] = parsedJson.nodes || [];
-    const edges: ConceptEdge[] = parsedJson.edges || [];
 
     return res.status(200).json({
       success: true,

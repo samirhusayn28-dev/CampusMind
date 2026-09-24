@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { StyleSheet, View, Animated, Image, Text } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import * as SplashScreen from 'expo-splash-screen';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ThemedNotificationHost } from './src/components/ThemedNotificationHost';
@@ -40,10 +41,11 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <View style={[styles.root, { backgroundColor: colors.background }]}>
-        <StatusBar style={isDark ? 'light' : 'dark'} />
-        <RootNavigator />
-        <ThemedNotificationHost />
+      <KeyboardProvider>
+        <View style={[styles.root, { backgroundColor: colors.background }]}>
+          <StatusBar style={isDark ? 'light' : 'dark'} />
+          <RootNavigator />
+          <ThemedNotificationHost />
 
         {!splashAnimationDone && (
           <Animated.View
@@ -81,7 +83,8 @@ export default function App() {
             </View>
           </Animated.View>
         )}
-      </View>
+        </View>
+      </KeyboardProvider>
     </SafeAreaProvider>
   );
 }

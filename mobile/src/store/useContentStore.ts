@@ -337,7 +337,7 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
     if (!target) throw new Error('Material not found');
 
     if (!target.extractedText || target.extractedText.trim().length < 20) {
-      throw new Error('Cannot summarize: extracted text has fewer than 20 characters.');
+      throw new Error("We couldn't extract enough readable text from this material to summarize. Please provide clearer notes.");
     }
 
     set({ isSummarizing: true, error: null });

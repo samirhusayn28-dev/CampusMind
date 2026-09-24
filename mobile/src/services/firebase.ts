@@ -136,24 +136,71 @@ export async function signInWithGoogleNative(): Promise<UserProfile> {
     const profile = await syncUserProfileToFirestore(firebaseUser);
     return profile;
   } catch (error: any) {
-    console.error('[GoogleAuth] Native sign-in error:', error);
-    const code = String(error?.code || '');
-    const msg = String(error?.message || '');
+    // Log the real Google error code and message to console only
+    console.error('[GoogleAuth Error]', {
+      code: error?.code,
+      message: error?.message,
+      nativeError: error,
+    });
 
+    const code = String(error?.code || '');
+    const msg = String(error?.message || '').toLowerCase();
+
+    // 1. User cancelled
     if (
-      code === statusCodes.SIGN_IN_CANCELLED ||
+      code === statusCodes?.SIGN_IN_CANCELLED ||
+      code === 'SIGN_IN_CANCELLED' ||
       code === '12501' ||
-      msg.toLowerCase().includes('cancel')
+      msg.includes('cancel')
     ) {
-      throw new Error('Sign in was cancelled');
-    } else if (code === statusCodes.IN_PROGRESS || code === '12502') {
-      throw new Error('Sign in is already in progress');
-    } else if (code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE || code === '12500') {
-      throw new Error('Google Play Services is not available or outdated');
+      throw new Error('Sign-in cancelled.');
     }
 
-    // Friendly sanitized error for any other reason (DEVELOPER_ERROR, code 10, network, config)
-    throw new Error('Google Sign-In failed. Please check your internet connection and try again.');
+    // 2. Sign-in already in progress
+    if (
+      code === statusCodes?.IN_PROGRESS ||
+      code === 'IN_PROGRESS' ||
+      code === '12502' ||
+      msg.includes('in progress')
+    ) {
+      throw new Error('Sign-in is already in progress. Please check the open prompt.');
+    }
+
+    // 3. Google Play Services unavailable
+    if (
+      code === statusCodes?.PLAY_SERVICES_NOT_AVAILABLE ||
+      code === 'PLAY_SERVICES_NOT_AVAILABLE' ||
+      code === '12500' ||
+      msg.includes('play services')
+    ) {
+      throw new Error('Google Play Services is unavailable or outdated on this device.');
+    }
+
+    // 4. Developer error (SHA-1 fingerprint missing or client_type 1 missing in Firebase)
+    if (
+      code === statusCodes?.DEVELOPER_ERROR ||
+      code === 'DEVELOPER_ERROR' ||
+      code === '10' ||
+      msg.includes('developer_error')
+    ) {
+      console.error(
+        '[GoogleAuth] DEVELOPER_ERROR (Code 10): Ensure release keystore SHA-1 (8B:B9:17:CA:51:16:33:43:9E:5B:80:2B:84:69:A9:2C:6D:E4:16:A5) is registered in Firebase Console!'
+      );
+      throw new Error("Couldn't sign in with Google. Please try again or continue as guest.");
+    }
+
+    // 5. Network error
+    if (
+      code === statusCodes?.NETWORK_ERROR ||
+      code === 'NETWORK_ERROR' ||
+      code === '7' ||
+      msg.includes('network')
+    ) {
+      throw new Error('Connection timed out during sign-in. Please try again.');
+    }
+
+    // Fallback friendly error
+    throw new Error("Couldn't complete sign-in, please try again.");
   }
 }
 
