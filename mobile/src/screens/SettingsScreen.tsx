@@ -6,12 +6,12 @@ import {
   ScrollView,
   TouchableOpacity,
   Switch,
-  Alert,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { showThemedAlert } from '../store/useNotificationStore';
+import { showThemedAlert, showThemedToast } from '../store/useNotificationStore';
 import { useThemeStore } from '../store/useThemeStore';
 import { useAuthStore } from '../store/useAuthStore';
 import {
@@ -20,6 +20,7 @@ import {
   SpeechPlaybackRate,
 } from '../store/useSettingsStore';
 import { useContentStore } from '../store/useContentStore';
+import { triggerHaptic } from '../services/haptics';
 import { Header } from '../components/Header';
 import { Card } from '../components/Card';
 import { Badge } from '../components/Badge';
@@ -36,6 +37,10 @@ export const SettingsScreen: React.FC = () => {
   const {
     studyRemindersEnabled,
     spacedRepetitionAlerts,
+    notificationInactivity,
+    notificationCourses,
+    notificationStreak,
+    notificationRevision,
     preferredLanguage,
     bilingualSummaries,
     defaultSpeechRate,
@@ -43,6 +48,10 @@ export const SettingsScreen: React.FC = () => {
     hapticsEnabled,
     setStudyRemindersEnabled,
     setSpacedRepetitionAlerts,
+    setNotificationInactivity,
+    setNotificationCourses,
+    setNotificationStreak,
+    setNotificationRevision,
     setPreferredLanguage,
     setBilingualSummaries,
     setDefaultSpeechRate,
@@ -53,6 +62,7 @@ export const SettingsScreen: React.FC = () => {
   const [isClearingCache, setIsClearingCache] = useState(false);
 
   const handleSignOut = () => {
+    triggerHaptic('warningNotification');
     showThemedAlert(
       'Sign Out',
       'Are you sure you want to sign out of CampusMind?',
@@ -62,7 +72,12 @@ export const SettingsScreen: React.FC = () => {
           text: 'Sign Out',
           style: 'destructive',
           onPress: async () => {
-            await signOut();
+            try {
+              triggerHaptic('mediumImpact');
+              await signOut();
+            } catch (err: any) {
+              showThemedAlert('Error', err.message || 'Failed to sign out.');
+            }
           },
         },
       ]
@@ -71,17 +86,24 @@ export const SettingsScreen: React.FC = () => {
 
   const handleConnectGoogle = async () => {
     try {
+      triggerHaptic('lightImpact');
       await signInWithGoogle();
-      showThemedAlert('Success', 'Google Account successfully connected and synchronized!');
+      triggerHaptic('successNotification');
+      showThemedToast('success', 'Connected with Google Account!');
     } catch (err: any) {
-      showThemedAlert('Google Sign-In', err.message || 'Unable to connect Google account.');
+      triggerHaptic('errorNotification');
+      showThemedAlert(
+        'Google Sign-In',
+        err.message || 'Google Sign-In failed. Please check your internet connection and try again.'
+      );
     }
   };
 
   const handleClearCache = async () => {
+    triggerHaptic('warningNotification');
     showThemedAlert(
       'Clear Offline Cache',
-      'This will remove temporarily cached materials from this device. Cloud-synced study materials will re-download when you open them.',
+      'This will remove cached study files from this device. Your notes will remain safe in the cloud and re-sync automatically.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -90,16 +112,17 @@ export const SettingsScreen: React.FC = () => {
           onPress: async () => {
             try {
               setIsClearingCache(true);
-              await AsyncStorage.removeItem('@campusmind_cached_materials_v1');
-              setActiveMaterial(null);
+              triggerHaptic('mediumImpact');
+              await AsyncStorage.removeItem('@campusmind_materials');
               if (user?.uid) {
                 await loadMaterials(user.uid);
               }
-              showThemedAlert('Cache Cleared', 'Offline study materials cache has been refreshed.');
-            } catch (err: any) {
-              showThemedAlert('Error', err.message || 'Could not clear cache.');
-            } finally {
               setIsClearingCache(false);
+              triggerHaptic('successNotification');
+              showThemedToast('success', 'Offline cache cleared successfully.');
+            } catch (err: any) {
+              setIsClearingCache(false);
+              showThemedAlert('Error', 'Could not clear cache.');
             }
           },
         },
@@ -107,18 +130,17 @@ export const SettingsScreen: React.FC = () => {
     );
   };
 
-  const languages: { key: SupportedLanguage; label: string }[] = [
-    { key: 'en', label: 'English' },
-    { key: 'roman_urdu', label: 'Roman Urdu' },
-    { key: 'urdu', label: 'اردو (Urdu)' },
+  const languages: { key: SupportedLanguage; label: string; sub: string }[] = [
+    { key: 'en', label: 'English', sub: 'Primary academic tone' },
+    { key: 'roman_urdu', label: 'Roman Urdu', sub: 'Urdu in Latin script' },
+    { key: 'urdu', label: 'اردو', sub: 'Nastaliq Urdu translation' },
   ];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Header
         title="Settings"
-        subtitle="Preferences and study profile"
-        showThemeToggle={false}
+        subtitle="Preferences, study reminders, and account"
       />
 
       <ScrollView
@@ -129,20 +151,23 @@ export const SettingsScreen: React.FC = () => {
         <Card variant="surface" style={styles.profileCard}>
           <View style={styles.profileRow}>
             <View style={[styles.avatar, { backgroundColor: colors.primaryContainer }]}>
-              <Ionicons name="person" size={26} color={colors.primary} />
+              <Ionicons name="person" size={24} color={colors.primary} />
             </View>
             <View style={styles.profileInfo}>
               <Text style={[styles.profileName, { color: colors.textPrimary }]}>
-                {user?.displayName || 'Campus Learner'}
+                {user?.displayName || 'Campus Student'}
               </Text>
               <Text style={[styles.profileEmail, { color: colors.textSecondary }]}>
-                {user?.email || 'guest.student@campusmind.edu'}
+                {user?.email || 'Student Account'}
               </Text>
+              {user?.isAnonymous && (
+                <Badge
+                  label="Demo Mode"
+                  variant="peach"
+                  style={{ alignSelf: 'flex-start', marginTop: 4 }}
+                />
+              )}
             </View>
-            <Badge
-              label={user?.isAnonymous ? 'Demo Mode' : 'Connected'}
-              variant={user?.isAnonymous ? 'peach' : 'sage'}
-            />
           </View>
 
           {user?.isAnonymous && (
@@ -178,7 +203,10 @@ export const SettingsScreen: React.FC = () => {
             </View>
             <Switch
               value={isDark}
-              onValueChange={toggleTheme}
+              onValueChange={() => {
+                triggerHaptic('selection');
+                toggleTheme();
+              }}
               trackColor={{ false: colors.border, true: colors.primary }}
               thumbColor={colors.surface}
             />
@@ -192,40 +220,110 @@ export const SettingsScreen: React.FC = () => {
             <View style={styles.settingTextCol}>
               <Text style={[styles.settingLabel, { color: colors.textPrimary }]}>Daily Study Reminders</Text>
               <Text style={[styles.settingDesc, { color: colors.textSecondary }]}>
-                Gentle nudges to keep your study streak active
+                Master toggle for Duolingo-style daily nudges
               </Text>
             </View>
             <Switch
               value={studyRemindersEnabled}
-              onValueChange={setStudyRemindersEnabled}
+              onValueChange={(val) => {
+                triggerHaptic('selection');
+                setStudyRemindersEnabled(val);
+              }}
               trackColor={{ false: colors.border, true: colors.primary }}
               thumbColor={colors.surface}
             />
           </View>
 
-          <View style={[styles.divider, { backgroundColor: colors.borderSubtle }]} />
+          {studyRemindersEnabled && (
+            <>
+              <View style={[styles.divider, { backgroundColor: colors.borderSubtle }]} />
 
-          <View style={styles.settingRow}>
-            <View style={styles.settingTextCol}>
-              <Text style={[styles.settingLabel, { color: colors.textPrimary }]}>Spaced Repetition Alerts</Text>
-              <Text style={[styles.settingDesc, { color: colors.textSecondary }]}>
-                Reminders when study materials are due for active recall
-              </Text>
-            </View>
-            <Switch
-              value={spacedRepetitionAlerts}
-              onValueChange={setSpacedRepetitionAlerts}
-              trackColor={{ false: colors.border, true: colors.primary }}
-              thumbColor={colors.surface}
-            />
-          </View>
+              <View style={styles.settingRow}>
+                <View style={styles.settingTextCol}>
+                  <Text style={[styles.settingLabel, { color: colors.textPrimary }]}>Inactivity Nudges</Text>
+                  <Text style={[styles.settingDesc, { color: colors.textSecondary }]}>
+                    Gentle reminders when you haven't opened the app
+                  </Text>
+                </View>
+                <Switch
+                  value={notificationInactivity}
+                  onValueChange={(val) => {
+                    triggerHaptic('selection');
+                    setNotificationInactivity(val);
+                  }}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor={colors.surface}
+                />
+              </View>
+
+              <View style={[styles.divider, { backgroundColor: colors.borderSubtle }]} />
+
+              <View style={styles.settingRow}>
+                <View style={styles.settingTextCol}>
+                  <Text style={[styles.settingLabel, { color: colors.textPrimary }]}>Course Material Alerts</Text>
+                  <Text style={[styles.settingDesc, { color: colors.textSecondary }]}>
+                    Prompts to review older lecture summaries
+                  </Text>
+                </View>
+                <Switch
+                  value={notificationCourses}
+                  onValueChange={(val) => {
+                    triggerHaptic('selection');
+                    setNotificationCourses(val);
+                  }}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor={colors.surface}
+                />
+              </View>
+
+              <View style={[styles.divider, { backgroundColor: colors.borderSubtle }]} />
+
+              <View style={styles.settingRow}>
+                <View style={styles.settingTextCol}>
+                  <Text style={[styles.settingLabel, { color: colors.textPrimary }]}>Daily Streak Reminders</Text>
+                  <Text style={[styles.settingDesc, { color: colors.textSecondary }]}>
+                    Keep your continuous study streak alive
+                  </Text>
+                </View>
+                <Switch
+                  value={notificationStreak}
+                  onValueChange={(val) => {
+                    triggerHaptic('selection');
+                    setNotificationStreak(val);
+                  }}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor={colors.surface}
+                />
+              </View>
+
+              <View style={[styles.divider, { backgroundColor: colors.borderSubtle }]} />
+
+              <View style={styles.settingRow}>
+                <View style={styles.settingTextCol}>
+                  <Text style={[styles.settingLabel, { color: colors.textPrimary }]}>Spaced Repetition & Revision</Text>
+                  <Text style={[styles.settingDesc, { color: colors.textSecondary }]}>
+                    Alerts when lecture concepts are due for active recall
+                  </Text>
+                </View>
+                <Switch
+                  value={notificationRevision}
+                  onValueChange={(val) => {
+                    triggerHaptic('selection');
+                    setNotificationRevision(val);
+                  }}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor={colors.surface}
+                />
+              </View>
+            </>
+          )}
         </Card>
 
         {/* Language & Translation */}
         <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Language & Translation</Text>
         <Card variant="surface" style={styles.settingCard}>
           <Text style={[styles.settingLabel, { color: colors.textPrimary, marginBottom: spacing.xs }]}>
-            Default AI Language
+            Default Study Language
           </Text>
           <Text style={[styles.settingDesc, { color: colors.textSecondary, marginBottom: spacing.sm }]}>
             Preferred language for summaries and concept explanations
@@ -244,7 +342,10 @@ export const SettingsScreen: React.FC = () => {
                       borderColor: isSelected ? colors.primary : colors.borderSubtle,
                     },
                   ]}
-                  onPress={() => setPreferredLanguage(lang.key)}
+                  onPress={() => {
+                    triggerHaptic('selection');
+                    setPreferredLanguage(lang.key);
+                  }}
                   activeOpacity={0.8}
                 >
                   <Text
@@ -266,29 +367,32 @@ export const SettingsScreen: React.FC = () => {
             <View style={styles.settingTextCol}>
               <Text style={[styles.settingLabel, { color: colors.textPrimary }]}>Bilingual Summaries</Text>
               <Text style={[styles.settingDesc, { color: colors.textSecondary }]}>
-                Display English and Urdu side-by-side by default
+                Automatically generate secondary translations for all materials
               </Text>
             </View>
             <Switch
               value={bilingualSummaries}
-              onValueChange={setBilingualSummaries}
+              onValueChange={(val) => {
+                triggerHaptic('selection');
+                setBilingualSummaries(val);
+              }}
               trackColor={{ false: colors.border, true: colors.primary }}
               thumbColor={colors.surface}
             />
           </View>
         </Card>
 
-        {/* AI & Audio Preferences */}
-        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>AI & Audio Preferences</Text>
+        {/* AI & Audio Settings */}
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Study Experience</Text>
         <Card variant="surface" style={styles.settingCard}>
           <Text style={[styles.settingLabel, { color: colors.textPrimary, marginBottom: spacing.xs }]}>
-            Default Speech Playback Rate
+            Audio Playback Speed
           </Text>
           <Text style={[styles.settingDesc, { color: colors.textSecondary, marginBottom: spacing.sm }]}>
-            Speed for text-to-speech lecture summaries
+            Speed for reading summaries and study guides aloud
           </Text>
 
-          <View style={styles.speechRatesRow}>
+          <View style={styles.ratesRow}>
             {SPEECH_RATES.map((rate) => {
               const isSelected = defaultSpeechRate === rate;
               return (
@@ -301,7 +405,10 @@ export const SettingsScreen: React.FC = () => {
                       borderColor: isSelected ? colors.primary : colors.borderSubtle,
                     },
                   ]}
-                  onPress={() => setDefaultSpeechRate(rate)}
+                  onPress={() => {
+                    triggerHaptic('selection');
+                    setDefaultSpeechRate(rate);
+                  }}
                   activeOpacity={0.8}
                 >
                   <Text
@@ -328,7 +435,10 @@ export const SettingsScreen: React.FC = () => {
             </View>
             <Switch
               value={autoGenerateQuizzes}
-              onValueChange={setAutoGenerateQuizzes}
+              onValueChange={(val) => {
+                triggerHaptic('selection');
+                setAutoGenerateQuizzes(val);
+              }}
               trackColor={{ false: colors.border, true: colors.primary }}
               thumbColor={colors.surface}
             />
@@ -340,12 +450,15 @@ export const SettingsScreen: React.FC = () => {
             <View style={styles.settingTextCol}>
               <Text style={[styles.settingLabel, { color: colors.textPrimary }]}>Haptic Feedback</Text>
               <Text style={[styles.settingDesc, { color: colors.textSecondary }]}>
-                Tactile responses on button taps and quiz answers
+                Tactile responses on button taps, tabs, and quiz answers
               </Text>
             </View>
             <Switch
               value={hapticsEnabled}
-              onValueChange={setHapticsEnabled}
+              onValueChange={(val) => {
+                triggerHaptic('selection');
+                setHapticsEnabled(val);
+              }}
               trackColor={{ false: colors.border, true: colors.primary }}
               thumbColor={colors.surface}
             />
@@ -388,14 +501,34 @@ export const SettingsScreen: React.FC = () => {
 
         {/* About App */}
         <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>About</Text>
-        <Card variant="lavender" style={styles.aboutCard}>
+        <Card variant="surface" style={styles.aboutCard}>
           <View style={styles.aboutHeader}>
-            <Ionicons name="school" size={24} color={colors.lavender} />
-            <Text style={[styles.aboutTitle, { color: colors.textPrimary }]}>CampusMind v1.0.0</Text>
+            <Ionicons name="school" size={24} color={colors.primary} />
+            <Text style={[styles.aboutTitle, { color: colors.textPrimary }]}>
+              CampusMind Version 1.0.5
+            </Text>
           </View>
           <Text style={[styles.aboutText, { color: colors.textSecondary }]}>
-            AI Study Companion designed with Material You principles. Built with React Native, Expo, Firebase Auth with Native Google Play Services, Groq AI, and Pinecone RAG.
+            CampusMind is an AI-powered academic study companion. It transforms lecture slides, audio recordings, YouTube lectures, and handwritten notes into structured study guides, active recall quizzes, flashcards, and concept maps. Features bilingual support (English, Urdu, Roman Urdu), audio summaries, and spaced repetition review.
           </Text>
+
+          <View style={[styles.divider, { backgroundColor: colors.borderSubtle, marginVertical: spacing.md }]} />
+
+          <View style={styles.developerBrandingBlock}>
+            <Text style={[styles.developedByLabel, { color: colors.textSecondary }]}>
+              Designed & Developed By
+            </Text>
+            <View style={styles.studioRow}>
+              <Image
+                source={require('../../assets/studioxenos-logo.png')}
+                style={styles.studioLogo}
+                resizeMode="contain"
+              />
+              <Text style={[styles.studioName, { color: colors.textPrimary }]}>
+                StudioXenos
+              </Text>
+            </View>
+          </View>
         </Card>
       </ScrollView>
     </View>
@@ -447,34 +580,34 @@ const styles = StyleSheet.create({
   },
   connectGoogleText: {
     ...typography.presets.labelMedium,
+    fontWeight: '700',
   },
   sectionTitle: {
-    ...typography.presets.titleSmall,
-    marginTop: spacing.sm,
-    marginBottom: spacing.xs,
+    ...typography.presets.labelLarge,
+    marginTop: spacing.xs,
   },
   settingCard: {
     padding: spacing.lg,
   },
   settingRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   settingActionRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   settingTextCol: {
     flex: 1,
     marginRight: spacing.md,
   },
   settingLabel: {
-    ...typography.presets.labelLarge,
+    ...typography.presets.titleSmall,
   },
   settingDesc: {
-    ...typography.presets.caption,
+    ...typography.presets.bodySmall,
     marginTop: 2,
   },
   divider: {
@@ -483,20 +616,22 @@ const styles = StyleSheet.create({
   },
   languageOptionsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs + 2,
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
   },
   langPill: {
-    paddingVertical: spacing.xs + 2,
-    paddingHorizontal: spacing.md,
+    flex: 1,
+    paddingVertical: spacing.sm,
     borderRadius: borderRadius.full,
     borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   langPillText: {
     ...typography.presets.labelMedium,
-    fontWeight: '600',
+    fontWeight: '700',
   },
-  speechRatesRow: {
+  ratesRow: {
     flexDirection: 'row',
     gap: spacing.sm,
   },
@@ -522,7 +657,7 @@ const styles = StyleSheet.create({
   },
   signOutText: {
     ...typography.presets.labelLarge,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   aboutCard: {
     padding: spacing.lg,
@@ -535,9 +670,33 @@ const styles = StyleSheet.create({
   },
   aboutTitle: {
     ...typography.presets.titleMedium,
+    fontWeight: '700',
   },
   aboutText: {
     ...typography.presets.bodySmall,
-    lineHeight: 20,
+    lineHeight: 22,
+  },
+  developerBrandingBlock: {
+    gap: 6,
+  },
+  developedByLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  studioRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  studioLogo: {
+    width: 32,
+    height: 32,
+  },
+  studioName: {
+    ...typography.presets.titleMedium,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
 });

@@ -116,3 +116,17 @@ export const showThemedAlert = (
     });
   }
 };
+
+export const showThemedToast = (
+  type: ToastType,
+  message: string,
+  title?: string,
+  duration?: number
+) => {
+  useNotificationStore.getState().showToast({
+    type,
+    message,
+    title,
+    duration,
+  });
+};

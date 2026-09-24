@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   Animated,
-  Easing,
   Modal,
   Platform,
 } from 'react-native';
@@ -18,14 +17,13 @@ import {
   ToastType,
   DialogItem,
 } from '../store/useNotificationStore';
-import { typography, spacing, borderRadius, shadows } from '../theme';
+import { typography, spacing, borderRadius } from '../theme';
 
-// Single Toast Component with Slide & Fade
+// Single Toast Component with Slide & Fade (High-Contrast Solid WCAG AA/AAA)
 const SingleToast: React.FC<{
   toast: ToastItem;
   onDismiss: () => void;
 }> = ({ toast, onDismiss }) => {
-  const colors = useThemeStore((state) => state.colors);
   const isDark = useThemeStore((state) => state.isDark);
   const translateY = useRef(new Animated.Value(-60)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -67,36 +65,44 @@ const SingleToast: React.FC<{
     switch (type) {
       case 'success':
         return {
-          bg: isDark ? 'rgba(40, 65, 45, 0.95)' : colors.primaryContainer,
-          border: colors.primary,
+          bg: isDark ? '#1C2E20' : '#E8F5E9',
+          border: isDark ? '#3D7A4C' : '#2E7D32',
           icon: 'checkmark-circle' as const,
-          iconColor: colors.primary,
-          textColor: isDark ? colors.textPrimary : colors.onPrimaryContainer,
+          iconColor: isDark ? '#81C784' : '#1B5E20',
+          titleColor: isDark ? '#FFFFFF' : '#0F3814',
+          textColor: isDark ? '#E8F5E9' : '#15471B',
+          closeColor: isDark ? '#81C784' : '#2E7D32',
         };
       case 'error':
         return {
-          bg: isDark ? 'rgba(75, 35, 30, 0.95)' : colors.peachContainer,
-          border: colors.peach,
+          bg: isDark ? '#3E1C1A' : '#FFEBEE',
+          border: isDark ? '#C62828' : '#D32F2F',
           icon: 'alert-circle' as const,
-          iconColor: colors.peach,
-          textColor: isDark ? colors.textPrimary : colors.onPeach,
+          iconColor: isDark ? '#EF9A9A' : '#B71C1C',
+          titleColor: isDark ? '#FFFFFF' : '#7F0000',
+          textColor: isDark ? '#FFEBEE' : '#931212',
+          closeColor: isDark ? '#EF9A9A' : '#B71C1C',
         };
       case 'warning':
         return {
-          bg: isDark ? 'rgba(70, 55, 25, 0.95)' : colors.amberContainer,
-          border: colors.amber,
+          bg: isDark ? '#3E2F13' : '#FFF8E1',
+          border: isDark ? '#F57F17' : '#F57F17',
           icon: 'warning' as const,
-          iconColor: colors.amber,
-          textColor: isDark ? colors.textPrimary : colors.onAmber,
+          iconColor: isDark ? '#FFE082' : '#C43E00',
+          titleColor: isDark ? '#FFFFFF' : '#5C2B00',
+          textColor: isDark ? '#FFF8E1' : '#6D3400',
+          closeColor: isDark ? '#FFE082' : '#C43E00',
         };
       case 'info':
       default:
         return {
-          bg: isDark ? 'rgba(30, 48, 70, 0.95)' : colors.skyContainer,
-          border: colors.sky,
+          bg: isDark ? '#16283B' : '#E3F2FD',
+          border: isDark ? '#1976D2' : '#1976D2',
           icon: 'information-circle' as const,
-          iconColor: colors.sky,
-          textColor: isDark ? colors.textPrimary : colors.onSky,
+          iconColor: isDark ? '#90CAF9' : '#0D47A1',
+          titleColor: isDark ? '#FFFFFF' : '#052A5E',
+          textColor: isDark ? '#E3F2FD' : '#0A3979',
+          closeColor: isDark ? '#90CAF9' : '#0D47A1',
         };
     }
   };
@@ -122,7 +128,7 @@ const SingleToast: React.FC<{
       >
         <Ionicons
           name={themeStyle.icon}
-          size={22}
+          size={24}
           color={themeStyle.iconColor}
           style={styles.toastIcon}
         />
@@ -131,7 +137,7 @@ const SingleToast: React.FC<{
             <Text
               style={[
                 styles.toastTitle,
-                { color: themeStyle.textColor },
+                { color: themeStyle.titleColor },
               ]}
               numberOfLines={1}
             >
@@ -150,8 +156,8 @@ const SingleToast: React.FC<{
         </View>
         <Ionicons
           name="close"
-          size={16}
-          color={colors.textSecondary}
+          size={18}
+          color={themeStyle.closeColor}
           style={styles.toastCloseIcon}
         />
       </TouchableOpacity>
@@ -159,12 +165,11 @@ const SingleToast: React.FC<{
   );
 };
 
-// Themed Confirmation Dialog Component
+// Themed Confirmation Dialog Component (High-Contrast Solid WCAG AA/AAA)
 const ThemedDialogModal: React.FC<{
   dialog: DialogItem;
   onClose: () => void;
 }> = ({ dialog, onClose }) => {
-  const colors = useThemeStore((state) => state.colors);
   const isDark = useThemeStore((state) => state.isDark);
   const scaleAnim = useRef(new Animated.Value(0.92)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -205,6 +210,11 @@ const ThemedDialogModal: React.FC<{
     });
   };
 
+  const dialogBg = isDark ? '#1E201E' : '#FFFFFF';
+  const dialogBorder = isDark ? '#333733' : '#E0E0E0';
+  const titleColor = isDark ? '#F0F2ED' : '#1A1C19';
+  const messageColor = isDark ? '#C4C7C0' : '#3E433E';
+
   return (
     <Modal
       transparent
@@ -218,19 +228,19 @@ const ThemedDialogModal: React.FC<{
           style={[
             styles.dialogCard,
             {
-              backgroundColor: isDark ? colors.surfaceElevated : colors.surface,
-              borderColor: colors.borderSubtle,
+              backgroundColor: dialogBg,
+              borderColor: dialogBorder,
               opacity: opacityAnim,
               transform: [{ scale: scaleAnim }],
             },
           ]}
         >
           <View style={styles.dialogHeader}>
-            <Text style={[styles.dialogTitle, { color: colors.textPrimary }]}>
+            <Text style={[styles.dialogTitle, { color: titleColor }]}>
               {dialog.title}
             </Text>
             {dialog.message ? (
-              <Text style={[styles.dialogMessage, { color: colors.textSecondary }]}>
+              <Text style={[styles.dialogMessage, { color: messageColor }]}>
                 {dialog.message}
               </Text>
             ) : null}
@@ -247,10 +257,10 @@ const ThemedDialogModal: React.FC<{
                   style={[
                     styles.dialogButton,
                     isDestructive
-                      ? { backgroundColor: isDark ? 'rgba(180, 50, 40, 0.25)' : colors.peachContainer, borderColor: colors.peach, borderWidth: 1 }
+                      ? { backgroundColor: '#D32F2F', borderWidth: 0 }
                       : isCancel
-                      ? { backgroundColor: colors.surfaceSubtle }
-                      : { backgroundColor: colors.primary },
+                      ? { backgroundColor: isDark ? '#2C2F2B' : '#F1F3F0' }
+                      : { backgroundColor: isDark ? '#406A4E' : '#2D4F3A' },
                   ]}
                   onPress={() => handleButtonPress(btn.onPress)}
                   activeOpacity={0.8}
@@ -259,10 +269,10 @@ const ThemedDialogModal: React.FC<{
                     style={[
                       styles.dialogButtonText,
                       isDestructive
-                        ? { color: colors.peach, fontWeight: '700' }
+                        ? { color: '#FFFFFF', fontWeight: '700' }
                         : isCancel
-                        ? { color: colors.textSecondary }
-                        : { color: colors.onPrimary, fontWeight: '700' },
+                        ? { color: isDark ? '#E2E4DE' : '#2E312D', fontWeight: '600' }
+                        : { color: '#FFFFFF', fontWeight: '700' },
                     ]}
                   >
                     {btn.text}
@@ -330,22 +340,22 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 420,
     borderRadius: borderRadius.lg,
-    borderWidth: 1,
+    borderWidth: 1.5,
     marginBottom: spacing.xs,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.18,
     shadowRadius: 6,
     elevation: 6,
   },
   toastInnerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: spacing.sm + 2,
+    paddingVertical: spacing.sm + 4,
     paddingHorizontal: spacing.md,
   },
   toastIcon: {
-    marginRight: spacing.sm,
+    marginRight: spacing.sm + 2,
   },
   toastTextContainer: {
     flex: 1,
@@ -354,18 +364,19 @@ const styles = StyleSheet.create({
   toastTitle: {
     ...typography.presets.bodySmall,
     fontWeight: '700',
-    marginBottom: 1,
+    marginBottom: 2,
   },
   toastMessage: {
     ...typography.presets.caption,
-    lineHeight: 16,
+    fontWeight: '500',
+    lineHeight: 18,
   },
   toastCloseIcon: {
     padding: spacing.xxs,
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.52)',
+    backgroundColor: 'rgba(0, 0, 0, 0.58)',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
@@ -392,7 +403,7 @@ const styles = StyleSheet.create({
   },
   dialogMessage: {
     ...typography.presets.bodyMedium,
-    lineHeight: 21,
+    lineHeight: 22,
   },
   dialogActions: {
     flexDirection: 'row',
@@ -400,12 +411,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   dialogButton: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md + 2,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md + 4,
     borderRadius: borderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 76,
+    minWidth: 84,
   },
   dialogButtonText: {
     ...typography.presets.bodyMedium,

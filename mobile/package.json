@@ -1,6 +1,6 @@
 {
   "name": "campusmind-mobile",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "main": "index.ts",
   "dependencies": {
     "@expo-google-fonts/plus-jakarta-sans": "^0.4.2",
@@ -16,7 +16,9 @@
     "expo-file-system": "^57.0.7",
     "expo-font": "~57.0.4",
     "expo-haptics": "~57.0.3",
+    "expo-image-manipulator": "~57.0.2",
     "expo-image-picker": "~57.0.20",
+    "expo-notifications": "~57.0.4",
     "expo-speech": "^57.0.3",
     "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",

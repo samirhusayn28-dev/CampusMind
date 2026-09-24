@@ -12,6 +12,10 @@ export interface SettingsState {
   studyRemindersEnabled: boolean;
   reminderTime: string; // e.g. "20:00"
   spacedRepetitionAlerts: boolean;
+  notificationInactivity: boolean;
+  notificationCourses: boolean;
+  notificationStreak: boolean;
+  notificationRevision: boolean;
 
   // Language & Translation
   preferredLanguage: SupportedLanguage;
@@ -28,6 +32,10 @@ export interface SettingsState {
   setStudyRemindersEnabled: (enabled: boolean) => void;
   setReminderTime: (time: string) => void;
   setSpacedRepetitionAlerts: (enabled: boolean) => void;
+  setNotificationInactivity: (enabled: boolean) => void;
+  setNotificationCourses: (enabled: boolean) => void;
+  setNotificationStreak: (enabled: boolean) => void;
+  setNotificationRevision: (enabled: boolean) => void;
   setPreferredLanguage: (lang: SupportedLanguage) => void;
   setBilingualSummaries: (enabled: boolean) => void;
   setDefaultSpeechRate: (rate: SpeechPlaybackRate) => void;
@@ -40,6 +48,10 @@ const defaultValues = {
   studyRemindersEnabled: true,
   reminderTime: '20:00',
   spacedRepetitionAlerts: true,
+  notificationInactivity: true,
+  notificationCourses: true,
+  notificationStreak: true,
+  notificationRevision: true,
   preferredLanguage: 'en' as SupportedLanguage,
   bilingualSummaries: false,
   defaultSpeechRate: 1.0 as SpeechPlaybackRate,
@@ -70,6 +82,22 @@ export const useSettingsStore = create<SettingsState>()(
       setSpacedRepetitionAlerts: (enabled) => {
         set({ spacedRepetitionAlerts: enabled });
         syncIfSignedIn({ spacedRepetitionAlerts: enabled }, get);
+      },
+      setNotificationInactivity: (enabled) => {
+        set({ notificationInactivity: enabled });
+        syncIfSignedIn({ notificationInactivity: enabled }, get);
+      },
+      setNotificationCourses: (enabled) => {
+        set({ notificationCourses: enabled });
+        syncIfSignedIn({ notificationCourses: enabled }, get);
+      },
+      setNotificationStreak: (enabled) => {
+        set({ notificationStreak: enabled });
+        syncIfSignedIn({ notificationStreak: enabled }, get);
+      },
+      setNotificationRevision: (enabled) => {
+        set({ notificationRevision: enabled });
+        syncIfSignedIn({ notificationRevision: enabled }, get);
       },
       setPreferredLanguage: (lang) => {
         set({ preferredLanguage: lang });

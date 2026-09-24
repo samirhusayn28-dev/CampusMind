@@ -124,7 +124,7 @@ export async function signInWithGoogleNative(): Promise<UserProfile> {
     const idToken = (response as any)?.data?.idToken || (response as any)?.idToken;
 
     if (!idToken) {
-      throw new Error('Google Sign-In succeeded but no ID Token was returned');
+      throw new Error('Google Sign-In failed. Please check your internet connection and try again.');
     }
 
     // Exchange Google ID Token with Firebase
@@ -136,15 +136,24 @@ export async function signInWithGoogleNative(): Promise<UserProfile> {
     const profile = await syncUserProfileToFirestore(firebaseUser);
     return profile;
   } catch (error: any) {
-    if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+    console.error('[GoogleAuth] Native sign-in error:', error);
+    const code = String(error?.code || '');
+    const msg = String(error?.message || '');
+
+    if (
+      code === statusCodes.SIGN_IN_CANCELLED ||
+      code === '12501' ||
+      msg.toLowerCase().includes('cancel')
+    ) {
       throw new Error('Sign in was cancelled');
-    } else if (error.code === statusCodes.IN_PROGRESS) {
+    } else if (code === statusCodes.IN_PROGRESS || code === '12502') {
       throw new Error('Sign in is already in progress');
-    } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+    } else if (code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE || code === '12500') {
       throw new Error('Google Play Services is not available or outdated');
     }
-    console.error('[GoogleAuth] Native sign-in error:', error);
-    throw error;
+
+    // Friendly sanitized error for any other reason (DEVELOPER_ERROR, code 10, network, config)
+    throw new Error('Google Sign-In failed. Please check your internet connection and try again.');
   }
 }
 

@@ -19,6 +19,7 @@ import { typography } from '../theme/typography';
 import { spacing, borderRadius } from '../theme/spacing';
 import { QuizQuestion } from '../types/content';
 import { ThemedLoader } from '../components/ThemedLoader';
+import { triggerHaptic } from '../services/haptics';
 
 interface QuizScreenProps {
   onBack: () => void;
@@ -114,6 +115,12 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
     const currentQuestion = questions[currentIndex];
     const isCorrect = index === currentQuestion.correctAnswerIndex;
 
+    if (isCorrect) {
+      triggerHaptic('successNotification');
+    } else {
+      triggerHaptic('errorNotification');
+    }
+
     setSelectedOptionIndex(index);
     setHasAnswered(true);
 
@@ -144,6 +151,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
   };
 
   const handleNext = () => {
+    triggerHaptic('lightImpact');
     if (currentIndex + 1 < questions.length) {
       setCurrentIndex((prev) => prev + 1);
       setSelectedOptionIndex(null);
@@ -210,7 +218,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
             'Structuring realistic distractors and edge cases...',
             'Writing comprehensive explanations & citations...',
           ]}
-          subtext="Groq AI is personalizing questions to maximize retention."
+          subtext="CampusMind AI is personalizing questions to maximize retention."
           icon="sparkles"
           variant="peach"
           size="large"

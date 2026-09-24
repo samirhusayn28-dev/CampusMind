@@ -35,6 +35,16 @@ interface ContentStoreState {
   ingestYouTube: (url: string, userId: string, subject?: string) => Promise<StudyMaterial>;
   ingestAudio: (audioBase64: string, durationSeconds: number, userId: string, subject?: string) => Promise<StudyMaterial>;
   ingestOcr: (imageBase64: string, userId: string, subject?: string) => Promise<StudyMaterial>;
+  saveExtractedMaterial: (params: {
+    title: string;
+    subject: string;
+    type: ContentType;
+    text: string;
+    userId: string;
+    originalFileName?: string;
+    sourceUrl?: string;
+    audioDurationSeconds?: number;
+  }) => Promise<StudyMaterial>;
   generateSummaryForMaterial: (materialId: string, userId: string) => Promise<StudyMaterial>;
   translateMaterialSummary: (materialId: string, targetLang: 'roman_urdu' | 'urdu', userId: string) => Promise<StudyMaterial>;
   generateQuizForMaterial: (materialId: string, userId: string) => Promise<QuizQuestion[]>;
@@ -72,16 +82,20 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
   ingestPdf: async (fileBase64: string, fileName: string, userId: string, subject: string = 'General Studies') => {
     set({
       isIngesting: true,
-      ingestionStage: 'Uploading PDF to serverless backend...',
+      ingestionStage: 'Uploading document...',
       ingestionType: 'pdf',
       error: null,
     });
 
     try {
-      set({ ingestionStage: 'Extracting text and structure with pdf-parse...' });
+      set({ ingestionStage: 'Extracting document text...' });
       const result = await extractPdfText(fileBase64, fileName);
 
-      set({ ingestionStage: 'Saving study material to Firestore...' });
+      if (!result.text || result.text.trim().length < 20) {
+        throw new Error(`Could not extract readable text from "${fileName}". Minimum 20 characters required.`);
+      }
+
+      set({ ingestionStage: 'Saving study material...' });
       const newMaterial: StudyMaterial = {
         id: `mat_pdf_${Date.now()}`,
         userId,
@@ -121,7 +135,7 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
   ingestYouTube: async (url: string, userId: string, subject: string = 'Computer Science') => {
     set({
       isIngesting: true,
-      ingestionStage: 'Fetching YouTube subtitles and transcript...',
+      ingestionStage: 'Fetching YouTube transcript...',
       ingestionType: 'youtube',
       error: null,
     });
@@ -129,7 +143,11 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
     try {
       const result = await extractYouTubeTranscript(url);
 
-      set({ ingestionStage: 'Formatting transcript and storing to Firestore...' });
+      if (!result.text || result.text.trim().length < 20) {
+        throw new Error('Could not extract readable transcript from video. Minimum 20 characters required.');
+      }
+
+      set({ ingestionStage: 'Formatting and saving transcript...' });
       const newMaterial: StudyMaterial = {
         id: `mat_yt_${Date.now()}`,
         userId,
@@ -170,16 +188,20 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
   ingestAudio: async (audioBase64: string, durationSeconds: number, userId: string, subject: string = 'Biology') => {
     set({
       isIngesting: true,
-      ingestionStage: 'Uploading audio to Groq Whisper API...',
+      ingestionStage: 'Processing lecture audio...',
       ingestionType: 'audio',
       error: null,
     });
 
     try {
-      set({ ingestionStage: 'Transcribing speech with Whisper-large-v3...' });
+      set({ ingestionStage: 'Transcribing speech to text...' });
       const result = await transcribeAudio(audioBase64);
 
-      set({ ingestionStage: 'Saving lecture notes to Firestore...' });
+      if (!result.text || result.text.trim().length < 10) {
+        throw new Error('No speech detected in audio recording. Minimum 10 characters required.');
+      }
+
+      set({ ingestionStage: 'Saving lecture notes...' });
       const newMaterial: StudyMaterial = {
         id: `mat_audio_${Date.now()}`,
         userId,
@@ -219,16 +241,20 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
   ingestOcr: async (imageBase64: string, userId: string, subject: string = 'History') => {
     set({
       isIngesting: true,
-      ingestionStage: 'Sending handwritten photo to Google Cloud Vision...',
+      ingestionStage: 'Scanning handwritten document...',
       ingestionType: 'ocr',
       error: null,
     });
 
     try {
-      set({ ingestionStage: 'Running document OCR & handwriting recognition...' });
+      set({ ingestionStage: 'Recognizing handwriting and text...' });
       const result = await extractOcrText(imageBase64);
 
-      set({ ingestionStage: 'Saving digitized notes to Firestore...' });
+      if (!result.text || result.text.trim().length < 10) {
+        throw new Error('No readable text found in this photo. Please retake with better lighting and focus.');
+      }
+
+      set({ ingestionStage: 'Saving digitized study notes...' });
       const newMaterial: StudyMaterial = {
         id: `mat_ocr_${Date.now()}`,
         userId,
@@ -264,9 +290,55 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
     }
   },
 
+  saveExtractedMaterial: async (params: {
+    title: string;
+    subject: string;
+    type: ContentType;
+    text: string;
+    userId: string;
+    originalFileName?: string;
+    sourceUrl?: string;
+    audioDurationSeconds?: number;
+  }) => {
+    const trimmed = params.text.trim();
+    if (!trimmed || trimmed.length < 10) {
+      throw new Error('No readable text found. Minimum 10 characters required.');
+    }
+
+    const newMaterial: StudyMaterial = {
+      id: `mat_${params.type}_${Date.now()}`,
+      userId: params.userId,
+      title: params.title || 'Study Material',
+      type: params.type,
+      originalFileName: params.originalFileName,
+      sourceUrl: params.sourceUrl,
+      audioDurationSeconds: params.audioDurationSeconds,
+      extractedText: trimmed,
+      wordCount: trimmed.split(/\s+/).filter(Boolean).length,
+      subject: params.subject,
+      createdAt: new Date().toISOString(),
+      status: 'ready',
+    };
+
+    await saveMaterial(newMaterial);
+    const updated = [newMaterial, ...get().materials];
+    set({
+      materials: updated,
+      activeMaterial: newMaterial,
+      isIngesting: false,
+      ingestionStage: '',
+      ingestionType: null,
+    });
+    return newMaterial;
+  },
+
   generateSummaryForMaterial: async (materialId: string, userId: string) => {
     const target = get().materials.find((m) => m.id === materialId);
     if (!target) throw new Error('Material not found');
+
+    if (!target.extractedText || target.extractedText.trim().length < 20) {
+      throw new Error('Cannot summarize: extracted text has fewer than 20 characters.');
+    }
 
     set({ isSummarizing: true, error: null });
     try {

@@ -20,6 +20,7 @@ import { Badge } from '../components/Badge';
 import { IngestionModal } from '../components/IngestionModal';
 import { HabitTrackerCard } from '../components/HabitTrackerCard';
 import { isDueForReview, getReviewBadge } from '../services/spacedRepetition';
+import { triggerHaptic } from '../services/haptics';
 import { spacing, borderRadius } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
@@ -105,6 +106,7 @@ export const HomeScreen: React.FC = () => {
   ];
 
   const handleOpenAction = (type: ContentType) => {
+    triggerHaptic('lightImpact');
     setModalType(type);
     setModalVisible(true);
   };
@@ -292,7 +294,11 @@ export const HomeScreen: React.FC = () => {
       </ScrollView>
 
       {/* Ingestion Modal */}
-      <IngestionModal visible={modalVisible} onClose={() => setModalVisible(false)} />
+      <IngestionModal
+        visible={modalVisible}
+        initialType={modalType}
+        onClose={() => setModalVisible(false)}
+      />
     </View>
   );
 };

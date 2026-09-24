@@ -2,7 +2,7 @@
   "expo": {
     "name": "CampusMind",
     "slug": "campusmind",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "campusmind",
@@ -24,11 +24,20 @@
     },
     "android": {
       "package": "com.campusmind.app",
-      "versionCode": 5,
+      "versionCode": 6,
       "adaptiveIcon": {
-        "backgroundColor": "#FBF9F5",
-        "foregroundImage": "./assets/android-icon-foreground.png"
+        "backgroundColor": "#fefefe",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
       },
+      "permissions": [
+        "android.permission.VIBRATE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.POST_NOTIFICATIONS"
+      ],
       "predictiveBackGestureEnabled": false,
       "googleServicesFile": "./google-services.json"
     },

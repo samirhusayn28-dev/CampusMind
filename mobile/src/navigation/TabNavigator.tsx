@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, TouchableOpacity } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { LibraryScreen } from '../screens/LibraryScreen';
 import { StudyChatScreen } from '../screens/StudyChatScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { useThemeStore } from '../store/useThemeStore';
+import { triggerHaptic } from '../services/haptics';
 import { borderRadius, spacing, shadows } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
@@ -42,7 +43,25 @@ export const TabNavigator: React.FC = () => {
           fontSize: 11,
           marginTop: 2,
         },
-        tabBarIcon: ({ focused, color, size }) => {
+        tabBarItemStyle: {
+          overflow: 'hidden',
+        },
+        // Clean native press: removes Android dark gray rectangle ripple and triggers light haptic
+        tabBarButton: (props) => {
+          const { ref, ...rest } = props as any;
+          return (
+            <TouchableOpacity
+              {...rest}
+              activeOpacity={0.8}
+              onPress={(e: any) => {
+                triggerHaptic('lightImpact');
+                props.onPress?.(e);
+              }}
+              style={props.style}
+            />
+          );
+        },
+        tabBarIcon: ({ focused, color }) => {
           let iconName: keyof typeof Ionicons.glyphMap = 'help-circle-outline';
 
           if (route.name === 'Home') {

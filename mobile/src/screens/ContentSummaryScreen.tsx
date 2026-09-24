@@ -384,7 +384,7 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = ({
         {isTranslating && (
           <Card variant="sage" style={styles.translatingCard}>
             <ThemedLoader
-              stage={`Translating summary into ${language === 'roman_urdu' ? 'Roman Urdu' : 'Urdu'} using Groq AI...`}
+              stage={`Translating summary into ${language === 'roman_urdu' ? 'Roman Urdu' : 'Urdu'}...`}
               icon="language-outline"
               variant="primary"
               size="small"
@@ -392,20 +392,20 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = ({
           </Card>
         )}
 
-        {/* If no summary yet: Call Groq to generate */}
+        {/* If no summary yet: Call AI to generate */}
         {!summary ? (
           isSummarizing ? (
             <Card variant="sage" style={styles.generatePromptCard}>
               <ThemedLoader
                 title="Generating AI Summary"
-                stage="Analyzing lecture content with Groq AI..."
+                stage="Analyzing lecture content..."
                 stages={[
                   'Analyzing lecture text and concepts...',
                   'Synthesizing 5–10 core takeaways...',
                   'Structuring topic breakdown & high-yield exam tips...',
                   'Formatting bilingual knowledge points...',
                 ]}
-                subtext="Groq Llama 3 is distilling high-yield study notes."
+                subtext="CampusMind AI is distilling high-yield study notes."
                 icon="sparkles"
                 variant="primary"
                 size="medium"
@@ -420,7 +420,7 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = ({
                 Generate AI Study Summary
               </Text>
               <Text style={[styles.generateDesc, { color: colors.textSecondary }]}>
-                Groq AI will analyze the extracted text, produce 5–10 key takeaways, and organize structured topic headings.
+                CampusMind AI will analyze the extracted text, produce 5–10 key takeaways, and organize structured topic headings.
               </Text>
 
               <TouchableOpacity
@@ -431,7 +431,7 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = ({
                 <View style={styles.btnContentRow}>
                   <Ionicons name="sparkles" size={18} color={colors.onPrimary} />
                   <Text style={[styles.primaryActionText, { color: colors.onPrimary }]}>
-                    Summarize with Groq AI
+                    Generate AI Summary
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -446,7 +446,7 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = ({
                   Executive Overview
                 </Text>
                 <Badge
-                  label={language === 'en' ? 'Groq AI (EN)' : language === 'roman_urdu' ? 'Groq (Roman Urdu)' : 'Groq (اردو)'}
+                  label={language === 'en' ? 'CampusMind AI' : language === 'roman_urdu' ? 'Roman Urdu' : 'اردو'}
                   variant={language === 'en' ? 'sage' : language === 'roman_urdu' ? 'peach' : 'lavender'}
                 />
               </View>

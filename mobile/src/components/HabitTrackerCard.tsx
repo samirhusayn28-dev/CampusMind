@@ -17,6 +17,7 @@ import {
   Habit,
 } from '../store/useHabitStore';
 import { showThemedAlert } from '../store/useNotificationStore';
+import { triggerHaptic } from '../services/haptics';
 import { Card } from './Card';
 import { Badge } from './Badge';
 import { typography, spacing, borderRadius, shadows } from '../theme';
@@ -133,6 +134,7 @@ export const HabitTrackerCard: React.FC = () => {
   }, [habits, studyStatsByDate, todayKey]);
 
   const handleToggle = async (habitId: string) => {
+    triggerHaptic('mediumImpact');
     await toggleHabit(habitId, todayKey, user?.uid);
   };
 
@@ -141,6 +143,7 @@ export const HabitTrackerCard: React.FC = () => {
       showThemedAlert('Habit Name', 'Please enter a name for your habit.');
       return;
     }
+    triggerHaptic('successNotification');
     await addHabit(newHabitTitle.trim(), newHabitIcon, user?.uid);
     setNewHabitTitle('');
     setIsAddModalOpen(false);

@@ -67,7 +67,7 @@ export const AuthScreen: React.FC = () => {
 
         {/* Auth Action Card */}
         <Card variant="surface" style={styles.authCard}>
-          <Badge label="Firebase Auth + Google Play Services" variant="sage" style={styles.badge} />
+          <Badge label="Secure Cloud Sign-In" variant="sage" style={styles.badge} />
           
           <TouchableOpacity
             style={[styles.googleButton, { backgroundColor: colors.primary }]}
