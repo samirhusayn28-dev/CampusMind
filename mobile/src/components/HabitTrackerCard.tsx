@@ -438,6 +438,7 @@ export const HabitTrackerCard: React.FC = () => {
       <Modal
         visible={isAddModalOpen}
         transparent
+        statusBarTranslucent
         animationType="fade"
         onRequestClose={() => setIsAddModalOpen(false)}
       >

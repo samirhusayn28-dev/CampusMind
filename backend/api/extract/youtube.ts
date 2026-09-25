@@ -159,6 +159,50 @@ async function fetchCaptionsViaInnerTube(videoId: string): Promise<{
   }
 }
 
+// Extract a JSON array from a string matching key with balanced bracket parsing
+function extractJsonArray(source: string, key: string): any[] | null {
+  const keyIdx = source.indexOf(key);
+  if (keyIdx === -1) return null;
+
+  const startBracket = source.indexOf('[', keyIdx + key.length);
+  if (startBracket === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escapeNext = false;
+
+  for (let i = startBracket; i < source.length; i++) {
+    const char = source[i];
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+    if (char === '\\') {
+      escapeNext = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (!inString) {
+      if (char === '[') depth++;
+      else if (char === ']') {
+        depth--;
+        if (depth === 0) {
+          const jsonStr = source.slice(startBracket, i + 1);
+          try {
+            return JSON.parse(jsonStr);
+          } catch {
+            return null;
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
 // Tier 2: HTML Page Scraper (ytInitialPlayerResponse fallback)
 async function fetchCaptionsViaWebPage(videoId: string): Promise<{
   tracks: CaptionTrackInfo[];
@@ -178,16 +222,8 @@ async function fetchCaptionsViaWebPage(videoId: string): Promise<{
       throw new Error('CAPTCHA_REQUIRED');
     }
 
-    // Direct regex for captionTracks
-    const captionMatch = html.match(/"captionTracks":\s*(\[.*?\])/);
-    let tracks: CaptionTrackInfo[] = [];
-    if (captionMatch) {
-      try {
-        tracks = JSON.parse(captionMatch[1]);
-      } catch {
-        tracks = [];
-      }
-    }
+    // Depth-matched parser for captionTracks
+    let tracks: CaptionTrackInfo[] = extractJsonArray(html, '"captionTracks"') || [];
 
     let title: string | undefined;
     const titleMatch = html.match(/<title>(.*?)<\/title>/);

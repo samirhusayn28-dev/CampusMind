@@ -533,7 +533,13 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
       <View style={styles.modalOverlay}>
         <TouchableOpacity
           style={StyleSheet.absoluteFill}
@@ -543,14 +549,14 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
         />
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{ width: '100%' }}
+          style={styles.keyboardContainer}
         >
           <View
             style={[
               styles.modalCard,
               {
-                backgroundColor: colors.background,
-                paddingBottom: Math.max(insets.bottom, spacing.md),
+                backgroundColor: isDark ? colors.surfaceElevated : colors.surface,
+                paddingBottom: Math.max(insets.bottom, 24) + (Platform.OS === 'android' ? 24 : 8),
               },
             ]}
           >
@@ -729,7 +735,7 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
               <View style={styles.bodyContent}>
                 {/* 1. PDF Tab */}
                 {activeTab === 'pdf' && (
-                  <Card variant="surface" style={styles.tabContentCard}>
+                  <View style={styles.tabContentSection}>
                     <View style={[styles.actionIconCircle, { backgroundColor: colors.primaryContainer }]}>
                       <Ionicons name="document-text" size={30} color={colors.primary} />
                     </View>
@@ -751,12 +757,12 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
                         Choose PDF from Files
                       </Text>
                     </TouchableOpacity>
-                  </Card>
+                  </View>
                 )}
 
                 {/* 2. YouTube Tab */}
                 {activeTab === 'youtube' && (
-                  <Card variant="surface" style={styles.tabContentCard}>
+                  <View style={styles.tabContentSection}>
                     <View style={[styles.actionIconCircle, { backgroundColor: colors.peachContainer }]}>
                       <Ionicons name="logo-youtube" size={30} color={colors.peach} />
                     </View>
@@ -795,12 +801,12 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
                         Extract Transcript
                       </Text>
                     </TouchableOpacity>
-                  </Card>
+                  </View>
                 )}
 
                 {/* 3. Audio Recording Tab */}
                 {activeTab === 'audio' && (
-                  <Card variant="surface" style={styles.tabContentCard}>
+                  <View style={styles.tabContentSection}>
                     <View style={[styles.actionIconCircle, { backgroundColor: colors.lavenderContainer }]}>
                       <Ionicons name="mic" size={30} color={colors.lavender} />
                     </View>
@@ -845,12 +851,12 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
                         </TouchableOpacity>
                       )}
                     </View>
-                  </Card>
+                  </View>
                 )}
 
                 {/* 4. Notes OCR Tab */}
                 {activeTab === 'ocr' && (
-                  <Card variant="surface" style={styles.tabContentCard}>
+                  <View style={styles.tabContentSection}>
                     <View style={[styles.actionIconCircle, { backgroundColor: colors.skyContainer }]}>
                       <Ionicons name="camera" size={30} color={colors.sky} />
                     </View>
@@ -880,7 +886,7 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
                         <Text style={[styles.primaryActionText, { color: colors.textPrimary }]}>From Gallery</Text>
                       </TouchableOpacity>
                     </View>
-                  </Card>
+                  </View>
                 )}
               </View>
             </View>
@@ -938,12 +944,20 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.52)',
     justifyContent: 'flex-end',
   },
+  keyboardContainer: {
+    width: '100%',
+    justifyContent: 'flex-end',
+  },
   modalCard: {
     borderTopLeftRadius: borderRadius.xxl,
     borderTopRightRadius: borderRadius.xxl,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
-    maxHeight: '90%',
+    maxHeight: '92%',
+    width: '100%',
+    overflow: 'hidden',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1051,6 +1065,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     alignItems: 'center',
     textAlign: 'center',
+  },
+  tabContentSection: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xs,
+    alignItems: 'center',
+    textAlign: 'center',
+    width: '100%',
   },
   actionIconCircle: {
     width: 60,

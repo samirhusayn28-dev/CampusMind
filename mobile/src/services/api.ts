@@ -255,29 +255,202 @@ export async function extractPdfText(fileBase64: string, fileName: string): Prom
   };
 }
 
-// 2. YouTube Transcript Extraction via backend
-export async function extractYouTubeTranscript(url: string): Promise<ExtractionResult> {
-  const data = await requestBackend<any>(
-    '/api/extract/youtube',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url }),
-    },
-    'extract YouTube transcript'
-  );
+export function extractYouTubeVideoId(url: string): string | null {
+  if (!url) return null;
+  const cleaned = url.trim();
+  if (/^[a-zA-Z0-9_-]{11}$/.test(cleaned)) {
+    return cleaned;
+  }
+  const regExp = /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([\w-]{11})/;
+  const match = cleaned.match(regExp);
+  return match ? match[1] : null;
+}
 
-  const text = (data.text || '').trim();
-  if (!text || text.length < 20) {
-    throw new Error('This video does not have subtitles or captions enabled. Please try a video with captions, or paste the lecture notes directly.');
+interface OnDeviceCaptionTrack {
+  baseUrl: string;
+  languageCode: string;
+  name?: { simpleText?: string };
+  kind?: string;
+}
+
+function decodeHtmlEntities(str: string): string {
+  return str
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function parseTimedTextXml(xml: string): { text: string; offset: number; duration: number }[] {
+  const items: { text: string; offset: number; duration: number }[] = [];
+
+  // Format 3: <p t="ms" d="ms">...<s>words</s>...</p>
+  const pRegex = /<p\s+t="(\d+)"\s+d="(\d+)"[^>]*>([\s\S]*?)<\/p>/g;
+  let pMatch: RegExpExecArray | null;
+  while ((pMatch = pRegex.exec(xml)) !== null) {
+    const rawText = pMatch[3].replace(/<[^>]+>/g, '').trim();
+    if (rawText) {
+      items.push({
+        text: decodeHtmlEntities(rawText),
+        offset: parseInt(pMatch[1], 10),
+        duration: parseInt(pMatch[2], 10),
+      });
+    }
   }
 
-  return {
-    text,
-    wordCount: data.wordCount || text.split(/\s+/).filter(Boolean).length,
-    title: data.title || `YouTube Lecture (${data.videoId || 'Video'})`,
-    durationSeconds: data.durationSeconds,
-  };
+  // Format 1 / classic: <text start="s" dur="s">...</text>
+  if (items.length === 0) {
+    const textRegex = /<text\s+start="([^"]*)"\s+dur="([^"]*)"[^>]*>([\s\S]*?)<\/text>/g;
+    let tMatch: RegExpExecArray | null;
+    while ((tMatch = textRegex.exec(xml)) !== null) {
+      const rawText = tMatch[3].replace(/<[^>]+>/g, '').trim();
+      if (rawText) {
+        items.push({
+          text: decodeHtmlEntities(rawText),
+          offset: Math.round(parseFloat(tMatch[1]) * 1000),
+          duration: Math.round(parseFloat(tMatch[2]) * 1000),
+        });
+      }
+    }
+  }
+
+  return items;
+}
+
+function selectBestCaptionTrack(tracks: OnDeviceCaptionTrack[]): OnDeviceCaptionTrack | null {
+  if (!tracks || tracks.length === 0) return null;
+  // 1. English manual
+  const enManual = tracks.find(
+    (t) => (t.languageCode === 'en' || t.languageCode?.startsWith('en-')) && t.kind !== 'asr'
+  );
+  if (enManual) return enManual;
+
+  // 2. English ASR
+  const enAsr = tracks.find((t) => t.languageCode === 'en' || t.languageCode?.startsWith('en-'));
+  if (enAsr) return enAsr;
+
+  // 3. Any manual
+  const anyManual = tracks.find((t) => t.kind !== 'asr');
+  if (anyManual) return anyManual;
+
+  // 4. First track
+  return tracks[0];
+}
+
+async function extractYouTubeTranscriptOnDevice(videoId: string): Promise<ExtractionResult | null> {
+  try {
+    // Attempt InnerTube Android API (runs with mobile device ISP IP)
+    const resp = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'com.google.android.youtube/20.10.38 (Linux; U; Android 14)',
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: 'ANDROID',
+            clientVersion: '20.10.38',
+          },
+        },
+        videoId,
+      }),
+    });
+
+    if (resp.ok) {
+      const data = (await resp.json()) as any;
+      const tracks: OnDeviceCaptionTrack[] =
+        data?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
+      const title = data?.videoDetails?.title;
+      const durationSeconds = data?.videoDetails?.lengthSeconds
+        ? parseInt(data.videoDetails.lengthSeconds, 10)
+        : undefined;
+
+      if (tracks.length > 0) {
+        const bestTrack = selectBestCaptionTrack(tracks);
+        if (bestTrack && bestTrack.baseUrl) {
+          const xmlResp = await fetch(bestTrack.baseUrl);
+          if (xmlResp.ok) {
+            const xml = await xmlResp.text();
+            const segments = parseTimedTextXml(xml);
+            if (segments.length > 0) {
+              const fullText = segments
+                .map((s) => s.text)
+                .join(' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+              if (fullText.length >= 20) {
+                return {
+                  text: fullText,
+                  wordCount: fullText.split(/\s+/).filter(Boolean).length,
+                  title: title || `YouTube Lecture (${videoId})`,
+                  durationSeconds,
+                };
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (deviceErr) {
+    console.warn('[On-Device YouTube Extraction Warning]:', deviceErr);
+  }
+  return null;
+}
+
+// 2. YouTube Transcript Extraction (On-device first, backend fallback)
+export async function extractYouTubeTranscript(url: string): Promise<ExtractionResult> {
+  const videoId = extractYouTubeVideoId(url);
+  if (!videoId) {
+    throw new Error('Please enter a valid YouTube video URL (e.g. https://youtu.be/... or https://youtube.com/watch?v=...)');
+  }
+
+  // 1. Try direct on-device extraction first (bypasses datacenter scraping blocks)
+  try {
+    const onDeviceResult = await extractYouTubeTranscriptOnDevice(videoId);
+    if (onDeviceResult && onDeviceResult.text.length >= 20) {
+      return onDeviceResult;
+    }
+  } catch (err) {
+    console.warn('[Direct On-Device YouTube Extraction Error]:', err);
+  }
+
+  // 2. Fall back to backend extraction endpoint
+  try {
+    const data = await requestBackend<any>(
+      '/api/extract/youtube',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      },
+      'extract YouTube transcript'
+    );
+
+    const text = (data.text || '').trim();
+    if (!text || text.length < 20) {
+      throw new Error(
+        'This video does not have closed captions or subtitles enabled by its creator. Please try a video with captions, or paste your lecture notes directly.'
+      );
+    }
+
+    return {
+      text,
+      wordCount: data.wordCount || text.split(/\s+/).filter(Boolean).length,
+      title: data.title || `YouTube Lecture (${data.videoId || 'Video'})`,
+      durationSeconds: data.durationSeconds,
+    };
+  } catch (backendErr: any) {
+    throw new Error(
+      backendErr.message ||
+        'This video does not have subtitles or captions enabled. Please try a video with captions, or paste the lecture notes directly.'
+    );
+  }
 }
 
 // 3. Audio Transcription via backend
