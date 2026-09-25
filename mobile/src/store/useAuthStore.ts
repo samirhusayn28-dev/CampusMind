@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { onAuthStateChanged } from 'firebase/auth';
-import { UserProfile } from '../types/auth';
+import { UserProfile, EducationLevel } from '../types/auth';
 import {
   auth,
   signInWithGoogleNative,
@@ -9,6 +9,7 @@ import {
   signOutUser,
   syncUserProfileToFirestore,
   configureGoogleSignIn,
+  completeUserProfileOnboarding,
 } from '../services/firebase';
 import { loadCloudSettings, loadCloudHabits } from '../services/sync';
 import { useHabitStore } from './useHabitStore';
@@ -29,6 +30,12 @@ interface AuthStoreState {
   signInAsGuest: (name?: string) => Promise<void>;
   signOut: () => Promise<void>;
   completeOnboarding: () => Promise<void>;
+  completeProfileOnboarding: (data: {
+    username: string;
+    age: number;
+    gender: string;
+    educationLevel: EducationLevel;
+  }) => Promise<void>;
   clearError: () => void;
 }
 
@@ -158,6 +165,29 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
   completeOnboarding: async () => {
     await AsyncStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
     set({ hasCompletedOnboarding: true });
+  },
+
+  completeProfileOnboarding: async (data: {
+    username: string;
+    age: number;
+    gender: string;
+    educationLevel: EducationLevel;
+  }) => {
+    const currentUser = get().user;
+    if (!currentUser?.uid) return;
+    set({ isLoading: true });
+    try {
+      const updatedProfile = await completeUserProfileOnboarding(currentUser.uid, data);
+      await AsyncStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
+      set({
+        user: updatedProfile,
+        hasCompletedOnboarding: true,
+        isLoading: false,
+      });
+    } catch (err: any) {
+      set({ isLoading: false, error: err.message });
+      throw err;
+    }
   },
 
   clearError: () => set({ error: null }),

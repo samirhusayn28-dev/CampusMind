@@ -21,6 +21,7 @@ import { spacing, borderRadius, shadows } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { Card } from '../components/Card';
 import { Badge } from '../components/Badge';
+import { ThemedLoader } from '../components/ThemedLoader';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HORIZONTAL_PADDING = spacing.lg;
@@ -336,6 +337,18 @@ export const OnboardingScreen: React.FC = () => {
           </>
         )}
       </View>
+
+      {/* Themed Loader during Google Sign-in */}
+      {isLoading && (
+        <ThemedLoader
+          title="Connecting to Google"
+          stage="Signing in to CampusMind..."
+          subtext="Setting up your academic study space..."
+          variant="primary"
+          size="medium"
+          overlay
+        />
+      )}
     </View>
   );
 };

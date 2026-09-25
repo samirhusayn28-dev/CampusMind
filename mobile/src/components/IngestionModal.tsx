@@ -512,240 +512,243 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
             </ScrollView>
           ) : (
             <>
-              {/* Type Tabs */}
-              <View style={[styles.tabBar, { backgroundColor: colors.surfaceSubtle }]}>
-                {(
-                  [
-                    { type: 'pdf', label: 'PDF', icon: 'document-text' },
-                    { type: 'youtube', label: 'YouTube', icon: 'logo-youtube' },
-                    { type: 'audio', label: 'Audio', icon: 'mic' },
-                    { type: 'ocr', label: 'Notes OCR', icon: 'camera' },
-                  ] as const
-                ).map((tab) => {
-                  const isActive = activeTab === tab.type;
-                  return (
-                    <TouchableOpacity
-                      key={tab.type}
-                      style={[
-                        styles.tabItem,
-                        isActive && { backgroundColor: colors.surface, ...shadows.subtle },
-                      ]}
-                      onPress={() => handleTabSwitch(tab.type)}
-                      disabled={isIngesting || isScanningOcr}
-                    >
-                      <Ionicons
-                        name={tab.icon as any}
-                        size={16}
-                        color={isActive ? colors.primary : colors.textSecondary}
-                      />
-                      <Text
-                        style={[
-                          styles.tabLabel,
-                          { color: isActive ? colors.textPrimary : colors.textSecondary },
-                        ]}
-                      >
-                        {tab.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {/* Subject Selector */}
-              <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>Assign Course / Subject</Text>
+              {/* Scrollable Container for Tab Bar, Subject Selector, and Action Cards */}
               <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.subjectScroll}
-              >
-                {subjects.map((subj) => {
-                  const isSel = selectedSubject === subj;
-                  return (
-                    <TouchableOpacity
-                      key={subj}
-                      style={[
-                        styles.subjectChip,
-                        { backgroundColor: isSel ? colors.primary : colors.surface },
-                      ]}
-                      onPress={() => setSelectedSubject(subj)}
-                      disabled={isIngesting || isScanningOcr}
-                    >
-                      <Text
-                        style={[
-                          styles.subjectText,
-                          { color: isSel ? colors.onPrimary : colors.textSecondary },
-                        ]}
-                      >
-                        {subj}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-
-              {/* Tab Content */}
-              <ScrollView
-                style={{ flex: 1 }}
-                contentContainerStyle={styles.bodyContent}
+                style={styles.modalScroll}
+                contentContainerStyle={styles.modalScrollContent}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="on-drag"
                 showsVerticalScrollIndicator={false}
               >
-                {/* 1. PDF Tab */}
-                {activeTab === 'pdf' && (
-                  <Card variant="surface" style={styles.tabContentCard}>
-                    <View style={[styles.actionIconCircle, { backgroundColor: colors.primaryContainer }]}>
-                      <Ionicons name="document-text" size={32} color={colors.primary} />
-                    </View>
-                    <Text style={[styles.contentCardTitle, { color: colors.textPrimary }]}>
-                      Upload Lecture PDF
-                    </Text>
-                    <Text style={[styles.contentCardDesc, { color: colors.textSecondary }]}>
-                      Upload lecture slide decks, syllabus sheets, or textbook chapters.
-                    </Text>
-
-                    <TouchableOpacity
-                      style={[styles.primaryActionBtn, { backgroundColor: colors.primary }]}
-                      onPress={handlePickPdf}
-                      disabled={isIngesting}
-                      activeOpacity={0.85}
-                    >
-                      <Ionicons name="folder-open-outline" size={18} color={colors.onPrimary} />
-                      <Text style={[styles.primaryActionText, { color: colors.onPrimary }]}>
-                        Choose PDF from Files
-                      </Text>
-                    </TouchableOpacity>
-                  </Card>
-                )}
-
-                {/* 2. YouTube Tab */}
-                {activeTab === 'youtube' && (
-                  <Card variant="surface" style={styles.tabContentCard}>
-                    <View style={[styles.actionIconCircle, { backgroundColor: colors.peachContainer }]}>
-                      <Ionicons name="logo-youtube" size={32} color={colors.peach} />
-                    </View>
-                    <Text style={[styles.contentCardTitle, { color: colors.textPrimary }]}>
-                      Import YouTube Lecture
-                    </Text>
-                    <Text style={[styles.contentCardDesc, { color: colors.textSecondary }]}>
-                      Paste any public YouTube lecture or tutorial link to extract the transcript.
-                    </Text>
-
-                    <TextInput
-                      placeholder="https://www.youtube.com/watch?v=..."
-                      placeholderTextColor={colors.textTertiary}
-                      value={youtubeUrl}
-                      onChangeText={setYoutubeUrl}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      style={[
-                        styles.urlInput,
-                        {
-                          backgroundColor: colors.surfaceSubtle,
-                          color: colors.textPrimary,
-                          borderColor: colors.borderSubtle,
-                        },
-                      ]}
-                    />
-
-                    <TouchableOpacity
-                      style={[styles.primaryActionBtn, { backgroundColor: colors.peach }]}
-                      onPress={handleIngestYouTube}
-                      disabled={isIngesting || !youtubeUrl.trim()}
-                      activeOpacity={0.85}
-                    >
-                      <Ionicons name="cloud-download-outline" size={18} color={colors.onPeach} />
-                      <Text style={[styles.primaryActionText, { color: colors.onPeach }]}>
-                        Extract Transcript
-                      </Text>
-                    </TouchableOpacity>
-                  </Card>
-                )}
-
-                {/* 3. Audio Recording Tab */}
-                {activeTab === 'audio' && (
-                  <Card variant="surface" style={styles.tabContentCard}>
-                    <View style={[styles.actionIconCircle, { backgroundColor: colors.lavenderContainer }]}>
-                      <Ionicons name="mic" size={32} color={colors.lavender} />
-                    </View>
-                    <Text style={[styles.contentCardTitle, { color: colors.textPrimary }]}>
-                      Live Audio Lecture
-                    </Text>
-                    <Text style={[styles.contentCardDesc, { color: colors.textSecondary }]}>
-                      Record in-class discussions, seminars, or lectures with Smart Audio Transcription.
-                    </Text>
-
-                    {isRecording && (
-                      <View style={styles.recordingTimerBox}>
-                        <View style={styles.pulsingDot} />
-                        <Text style={[styles.recordingTimerText, { color: colors.peach }]}>
-                          {formatSeconds(recordDuration)}
+                {/* Type Tabs */}
+                <View style={[styles.tabBar, { backgroundColor: colors.surfaceSubtle }]}>
+                  {(
+                    [
+                      { type: 'pdf', label: 'PDF', icon: 'document-text' },
+                      { type: 'youtube', label: 'YouTube', icon: 'logo-youtube' },
+                      { type: 'audio', label: 'Audio', icon: 'mic' },
+                      { type: 'ocr', label: 'Notes OCR', icon: 'camera' },
+                    ] as const
+                  ).map((tab) => {
+                    const isActive = activeTab === tab.type;
+                    return (
+                      <TouchableOpacity
+                        key={tab.type}
+                        style={[
+                          styles.tabItem,
+                          isActive && { backgroundColor: colors.surface, ...shadows.subtle },
+                        ]}
+                        onPress={() => handleTabSwitch(tab.type)}
+                        disabled={isIngesting || isScanningOcr}
+                      >
+                        <Ionicons
+                          name={tab.icon as any}
+                          size={16}
+                          color={isActive ? colors.primary : colors.textSecondary}
+                        />
+                        <Text
+                          style={[
+                            styles.tabLabel,
+                            { color: isActive ? colors.textPrimary : colors.textSecondary },
+                          ]}
+                        >
+                          {tab.label}
                         </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Subject Selector */}
+                <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>Assign Course / Subject</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.subjectScroll}
+                >
+                  {subjects.map((subj) => {
+                    const isSel = selectedSubject === subj;
+                    return (
+                      <TouchableOpacity
+                        key={subj}
+                        style={[
+                          styles.subjectChip,
+                          { backgroundColor: isSel ? colors.primary : colors.surface },
+                        ]}
+                        onPress={() => setSelectedSubject(subj)}
+                        disabled={isIngesting || isScanningOcr}
+                      >
+                        <Text
+                          style={[
+                            styles.subjectText,
+                            { color: isSel ? colors.onPrimary : colors.textSecondary },
+                          ]}
+                        >
+                          {subj}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                {/* Tab Action Card Container */}
+                <View style={styles.bodyContent}>
+                  {/* 1. PDF Tab */}
+                  {activeTab === 'pdf' && (
+                    <Card variant="surface" style={styles.tabContentCard}>
+                      <View style={[styles.actionIconCircle, { backgroundColor: colors.primaryContainer }]}>
+                        <Ionicons name="document-text" size={32} color={colors.primary} />
                       </View>
-                    )}
+                      <Text style={[styles.contentCardTitle, { color: colors.textPrimary }]}>
+                        Upload Lecture PDF
+                      </Text>
+                      <Text style={[styles.contentCardDesc, { color: colors.textSecondary }]}>
+                        Upload lecture slide decks, syllabus sheets, or textbook chapters.
+                      </Text>
 
-                    <View style={styles.audioBtnRow}>
-                      {!isRecording ? (
-                        <TouchableOpacity
-                          style={[styles.primaryActionBtn, { backgroundColor: colors.lavender, flex: 1 }]}
-                          onPress={startRecording}
-                          disabled={isIngesting}
-                        >
-                          <Ionicons name="radio-button-on" size={18} color={colors.onLavender} />
-                          <Text style={[styles.primaryActionText, { color: colors.onLavender }]}>
-                            Start Recording
+                      <TouchableOpacity
+                        style={[styles.primaryActionBtn, { backgroundColor: colors.primary }]}
+                        onPress={handlePickPdf}
+                        disabled={isIngesting}
+                        activeOpacity={0.85}
+                      >
+                        <Ionicons name="folder-open-outline" size={18} color={colors.onPrimary} />
+                        <Text style={[styles.primaryActionText, { color: colors.onPrimary }]}>
+                          Choose PDF from Files
+                        </Text>
+                      </TouchableOpacity>
+                    </Card>
+                  )}
+
+                  {/* 2. YouTube Tab */}
+                  {activeTab === 'youtube' && (
+                    <Card variant="surface" style={styles.tabContentCard}>
+                      <View style={[styles.actionIconCircle, { backgroundColor: colors.peachContainer }]}>
+                        <Ionicons name="logo-youtube" size={32} color={colors.peach} />
+                      </View>
+                      <Text style={[styles.contentCardTitle, { color: colors.textPrimary }]}>
+                        Import YouTube Lecture
+                      </Text>
+                      <Text style={[styles.contentCardDesc, { color: colors.textSecondary }]}>
+                        Paste any public YouTube lecture or tutorial link to extract the transcript.
+                      </Text>
+
+                      <TextInput
+                        placeholder="https://www.youtube.com/watch?v=..."
+                        placeholderTextColor={colors.textTertiary}
+                        value={youtubeUrl}
+                        onChangeText={setYoutubeUrl}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        style={[
+                          styles.urlInput,
+                          {
+                            backgroundColor: colors.surfaceSubtle,
+                            color: colors.textPrimary,
+                            borderColor: colors.borderSubtle,
+                          },
+                        ]}
+                      />
+
+                      <TouchableOpacity
+                        style={[styles.primaryActionBtn, { backgroundColor: colors.peach }]}
+                        onPress={handleIngestYouTube}
+                        disabled={isIngesting || !youtubeUrl.trim()}
+                        activeOpacity={0.85}
+                      >
+                        <Ionicons name="cloud-download-outline" size={18} color={colors.onPeach} />
+                        <Text style={[styles.primaryActionText, { color: colors.onPeach }]}>
+                          Extract Transcript
+                        </Text>
+                      </TouchableOpacity>
+                    </Card>
+                  )}
+
+                  {/* 3. Audio Recording Tab */}
+                  {activeTab === 'audio' && (
+                    <Card variant="surface" style={styles.tabContentCard}>
+                      <View style={[styles.actionIconCircle, { backgroundColor: colors.lavenderContainer }]}>
+                        <Ionicons name="mic" size={32} color={colors.lavender} />
+                      </View>
+                      <Text style={[styles.contentCardTitle, { color: colors.textPrimary }]}>
+                        Live Audio Lecture
+                      </Text>
+                      <Text style={[styles.contentCardDesc, { color: colors.textSecondary }]}>
+                        Record in-class discussions, seminars, or lectures with Smart Audio Transcription.
+                      </Text>
+
+                      {isRecording && (
+                        <View style={styles.recordingTimerBox}>
+                          <View style={styles.pulsingDot} />
+                          <Text style={[styles.recordingTimerText, { color: colors.peach }]}>
+                            {formatSeconds(recordDuration)}
                           </Text>
-                        </TouchableOpacity>
-                      ) : (
-                        <TouchableOpacity
-                          style={[styles.primaryActionBtn, { backgroundColor: colors.peach, flex: 1 }]}
-                          onPress={stopAndUploadRecording}
-                          disabled={isIngesting}
-                        >
-                          <Ionicons name="stop-circle-outline" size={18} color={colors.onPeach} />
-                          <Text style={[styles.primaryActionText, { color: colors.onPeach }]}>
-                            Finish & Transcribe
-                          </Text>
-                        </TouchableOpacity>
+                        </View>
                       )}
-                    </View>
-                  </Card>
-                )}
 
-                {/* 4. Notes OCR Tab */}
-                {activeTab === 'ocr' && (
-                  <Card variant="surface" style={styles.tabContentCard}>
-                    <View style={[styles.actionIconCircle, { backgroundColor: colors.skyContainer }]}>
-                      <Ionicons name="camera" size={32} color={colors.sky} />
-                    </View>
-                    <Text style={[styles.contentCardTitle, { color: colors.textPrimary }]}>
-                      Handwritten Notes Scanner
-                    </Text>
-                    <Text style={[styles.contentCardDesc, { color: colors.textSecondary }]}>
-                      Capture photos of your handwritten notebook pages, whiteboards, or handouts.
-                    </Text>
+                      <View style={styles.audioBtnRow}>
+                        {!isRecording ? (
+                          <TouchableOpacity
+                            style={[styles.primaryActionBtn, { backgroundColor: colors.lavender, flex: 1 }]}
+                            onPress={startRecording}
+                            disabled={isIngesting}
+                          >
+                            <Ionicons name="radio-button-on" size={18} color={colors.onLavender} />
+                            <Text style={[styles.primaryActionText, { color: colors.onLavender }]}>
+                              Start Recording
+                            </Text>
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity
+                            style={[styles.primaryActionBtn, { backgroundColor: colors.peach, flex: 1 }]}
+                            onPress={stopAndUploadRecording}
+                            disabled={isIngesting}
+                          >
+                            <Ionicons name="stop-circle-outline" size={18} color={colors.onPeach} />
+                            <Text style={[styles.primaryActionText, { color: colors.onPeach }]}>
+                              Finish & Transcribe
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </Card>
+                  )}
 
-                    <View style={styles.ocrBtnRow}>
-                      <TouchableOpacity
-                        style={[styles.ocrActionBtn, { backgroundColor: colors.sky }]}
-                        onPress={() => handlePickPhoto(true)}
-                        disabled={isIngesting || isScanningOcr}
-                      >
-                        <Ionicons name="camera-outline" size={18} color={colors.onSky} />
-                        <Text style={[styles.primaryActionText, { color: colors.onSky }]}>Take Photo</Text>
-                      </TouchableOpacity>
+                  {/* 4. Notes OCR Tab */}
+                  {activeTab === 'ocr' && (
+                    <Card variant="surface" style={styles.tabContentCard}>
+                      <View style={[styles.actionIconCircle, { backgroundColor: colors.skyContainer }]}>
+                        <Ionicons name="camera" size={32} color={colors.sky} />
+                      </View>
+                      <Text style={[styles.contentCardTitle, { color: colors.textPrimary }]}>
+                        Handwritten Notes Scanner
+                      </Text>
+                      <Text style={[styles.contentCardDesc, { color: colors.textSecondary }]}>
+                        Capture photos of your handwritten notebook pages, whiteboards, or handouts.
+                      </Text>
 
-                      <TouchableOpacity
-                        style={[styles.ocrActionBtn, { backgroundColor: colors.surfaceSubtle }]}
-                        onPress={() => handlePickPhoto(false)}
-                        disabled={isIngesting || isScanningOcr}
-                      >
-                        <Ionicons name="images-outline" size={18} color={colors.textPrimary} />
-                        <Text style={[styles.primaryActionText, { color: colors.textPrimary }]}>From Gallery</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </Card>
-                )}
+                      <View style={styles.ocrBtnRow}>
+                        <TouchableOpacity
+                          style={[styles.ocrActionBtn, { backgroundColor: colors.sky }]}
+                          onPress={() => handlePickPhoto(true)}
+                          disabled={isIngesting || isScanningOcr}
+                        >
+                          <Ionicons name="camera-outline" size={18} color={colors.onSky} />
+                          <Text style={[styles.primaryActionText, { color: colors.onSky }]}>Take Photo</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[styles.ocrActionBtn, { backgroundColor: colors.surfaceSubtle }]}
+                          onPress={() => handlePickPhoto(false)}
+                          disabled={isIngesting || isScanningOcr}
+                        >
+                          <Ionicons name="images-outline" size={18} color={colors.textPrimary} />
+                          <Text style={[styles.primaryActionText, { color: colors.textPrimary }]}>From Gallery</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </Card>
+                  )}
+                </View>
               </ScrollView>
             </>
           )}
@@ -867,8 +870,14 @@ const styles = StyleSheet.create({
     ...typography.presets.labelMedium,
     fontSize: 12,
   },
+  modalScroll: {
+    maxHeight: '100%',
+  },
+  modalScrollContent: {
+    paddingBottom: spacing.lg,
+  },
   bodyContent: {
-    minHeight: 260,
+    marginTop: spacing.xs,
   },
   tabContentCard: {
     padding: spacing.xl,

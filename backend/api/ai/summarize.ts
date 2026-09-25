@@ -10,6 +10,7 @@ interface SummarizeRequestBody {
   text: string;
   title?: string;
   contentType?: string;
+  educationLevel?: string;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -22,7 +23,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { text, title, contentType = 'lecture' } = (req.body || {}) as SummarizeRequestBody;
+    const {
+      text,
+      title,
+      contentType = 'lecture',
+      educationLevel = 'Bachelors',
+    } = (req.body || {}) as SummarizeRequestBody;
 
     if (!text || text.trim().length < 20) {
       return res.status(400).json({
@@ -39,8 +45,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    let difficultyInstruction = 'Target audience: Undergraduate / Bachelors student. Balance academic rigor, clear conceptual explanation, and university-level vocabulary.';
+    if (educationLevel === 'Intermediate') {
+      difficultyInstruction = 'Target audience: Intermediate / High School student. Use clear, accessible language, intuitive analogies, and avoid overly dense technical jargon.';
+    } else if (educationLevel === 'Masters') {
+      difficultyInstruction = 'Target audience: Graduate / Masters student. Use precise technical terminology, advanced domain depth, and scholarly concepts.';
+    } else if (educationLevel === 'PhD') {
+      difficultyInstruction = 'Target audience: PhD / Doctoral researcher. Use dense, rigorous academic vocabulary, deep theoretical synthesis, and nuanced edge cases.';
+    }
+
     const systemPrompt = `You are CampusMind AI, an expert academic study companion.
-Your mission is to convert raw lecture notes, PDF transcripts, audio recordings, or textbook materials into clear, encouraging, structured study summaries for university students.
+Your mission is to convert raw lecture notes, PDF transcripts, audio recordings, or textbook materials into clear, encouraging, structured study summaries.
+
+ADAPTIVE DIFFICULTY & VOCABULARY LEVEL:
+${difficultyInstruction}
 
 CRITICAL INSTRUCTION:
 Generate the summary, key takeaways, and section headings based ONLY and STRICTLY on the facts, concepts, and details provided in the user's raw extracted text.

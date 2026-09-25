@@ -291,7 +291,8 @@ export interface SummarizeResponse {
 export async function summarizeContent(
   text: string,
   title?: string,
-  contentType: string = 'lecture'
+  contentType: string = 'lecture',
+  educationLevel?: string
 ): Promise<SummarizeResponse> {
   const trimmed = (text || '').trim();
   if (!trimmed || trimmed.length < 20) {
@@ -303,7 +304,7 @@ export async function summarizeContent(
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: trimmed, title, contentType }),
+      body: JSON.stringify({ text: trimmed, title, contentType, educationLevel }),
     },
     'generate the summary'
   );
@@ -351,7 +352,8 @@ export async function generateQuizContent(
   text: string,
   title?: string,
   summary?: any,
-  questionCount: number = 6
+  questionCount: number = 6,
+  educationLevel?: string
 ): Promise<any[]> {
   const data = await requestBackend<any>(
     '/api/ai/quiz',
@@ -363,6 +365,7 @@ export async function generateQuizContent(
         title,
         summary,
         questionCount,
+        educationLevel,
       }),
     },
     'generate practice quiz'

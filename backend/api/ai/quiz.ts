@@ -11,6 +11,7 @@ interface QuizRequestBody {
   title?: string;
   summary?: any;
   questionCount?: number;
+  educationLevel?: string;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -28,6 +29,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       title = 'Study Material',
       summary,
       questionCount = 6,
+      educationLevel = 'Bachelors',
     } = (req.body || {}) as QuizRequestBody;
 
     if (!text && !summary) {
@@ -46,8 +48,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const truncatedContent = text && text.length > 25000 ? text.substring(0, 25000) : text || '';
     const summaryContext = summary ? JSON.stringify(summary) : '';
 
+    let difficultyGuidance = 'Target level: Undergraduate / Bachelors. Questions should test core university concepts, analytical reasoning, and practical application.';
+    if (educationLevel === 'Intermediate') {
+      difficultyGuidance = 'Target level: Intermediate / High School. Questions should test fundamental definitions, core concepts, and intuitive understanding with clear, straightforward phrasing.';
+    } else if (educationLevel === 'Masters' || educationLevel === 'PhD') {
+      difficultyGuidance = 'Target level: Graduate / Masters / PhD. Questions should test advanced synthesis, nuanced theoretical distinctions, rigorous mechanisms, and technical depth.';
+    }
+
     const systemPrompt = `You are CampusMind AI, an expert educational coach.
 Create an encouraging, high-yield practice quiz designed for active recall.
+
+ADAPTIVE DIFFICULTY LEVEL:
+${difficultyGuidance}
+
 Generate between 5 and 8 multiple-choice questions based STRICTLY on the provided study material.
 Questions must test understanding of key principles, definitions, and mechanisms — not trivial trivia.
 

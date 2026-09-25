@@ -39,17 +39,27 @@ export const HomeScreen: React.FC = () => {
     }
   }, [user?.uid, loadMaterials]);
 
-  const firstName = user?.displayName ? user.displayName.split(' ')[0] : 'Student';
-  const streak = user?.studyStreak || 1;
+  // Title calculation: "CampusMind" before onboarding, "Good morning, <username>" after onboarding
+  const headerTitle = useMemo(() => {
+    const hasOnboardedProfile = user?.isOnboarded && (user?.username || user?.displayName);
+    if (!hasOnboardedProfile) {
+      return 'CampusMind';
+    }
 
-  // Time-of-day greeting
-  const greeting = useMemo(() => {
+    const userName = user.username || user.displayName?.split(' ')[0] || 'Student';
     const hour = new Date().getHours();
-    if (hour < 12) return `Good morning, ${firstName} ☀️`;
-    if (hour < 17) return `Good afternoon, ${firstName} ⛅`;
-    if (hour < 22) return `Good evening, ${firstName} 🌙`;
-    return `Late-night study session, ${firstName} ✨`;
-  }, [firstName]);
+    if (hour < 12) return `Good morning, ${userName} ☀️`;
+    if (hour < 17) return `Good afternoon, ${userName} ⛅`;
+    if (hour < 22) return `Good evening, ${userName} 🌙`;
+    return `Late-night study session, ${userName} ✨`;
+  }, [user?.isOnboarded, user?.username, user?.displayName]);
+
+  const headerSubtitle = useMemo(() => {
+    if (user?.isOnboarded && user?.username) {
+      return `${user.educationLevel || 'Academic'} Study Space`;
+    }
+    return 'Your calm, daily study companion';
+  }, [user?.isOnboarded, user?.username, user?.educationLevel]);
 
   // Dynamic Spaced Repetition Due calculations
   const dueItems = useMemo(() => {
@@ -130,8 +140,8 @@ export const HomeScreen: React.FC = () => {
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       <Header
-        title={greeting}
-        subtitle="Your calm, daily study companion"
+        title={headerTitle}
+        subtitle={headerSubtitle}
       />
 
       <ScrollView

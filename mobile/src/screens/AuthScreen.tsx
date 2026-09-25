@@ -14,6 +14,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { showThemedAlert } from '../store/useNotificationStore';
 import { Card } from '../components/Card';
 import { Badge } from '../components/Badge';
+import { ThemedLoader } from '../components/ThemedLoader';
 import { spacing, borderRadius, shadows } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
@@ -107,6 +108,18 @@ export const AuthScreen: React.FC = () => {
           </Text>
         </View>
       </View>
+
+      {/* Themed Loader during Google Sign-in */}
+      {isLoading && (
+        <ThemedLoader
+          title="Connecting to Google"
+          stage="Signing in to CampusMind..."
+          subtext="Setting up your academic study space..."
+          variant="primary"
+          size="medium"
+          overlay
+        />
+      )}
     </View>
   );
 };

@@ -10,6 +10,7 @@ export type MainTabParamList = {
 export type RootStackParamList = {
   Onboarding: undefined;
   Auth: undefined;
+  ProfileOnboarding: undefined;
   MainTabs: NavigatorScreenParams<MainTabParamList>;
   Summary: { materialId?: string } | undefined;
   Quiz: { materialId?: string } | undefined;

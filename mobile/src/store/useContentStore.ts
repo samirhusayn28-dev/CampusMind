@@ -16,6 +16,7 @@ import {
   deleteMaterial as deleteMaterialFromService,
 } from '../services/content';
 import { calculateNextReview } from '../services/spacedRepetition';
+import { useAuthStore } from './useAuthStore';
 
 interface ContentStoreState {
   materials: StudyMaterial[];
@@ -342,7 +343,14 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
 
     set({ isSummarizing: true, error: null });
     try {
-      const summaryResult = await summarizeContent(target.extractedText, target.title, target.type);
+      const currentUser = useAuthStore.getState().user;
+      const educationLevel = currentUser?.educationLevel || 'Bachelors';
+      const summaryResult = await summarizeContent(
+        target.extractedText,
+        target.title,
+        target.type,
+        educationLevel
+      );
 
       const updatedMaterial: StudyMaterial = {
         ...target,
@@ -447,10 +455,14 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
 
     set({ isGeneratingQuiz: true, error: null });
     try {
+      const currentUser = useAuthStore.getState().user;
+      const educationLevel = currentUser?.educationLevel || 'Bachelors';
       const questions = await generateQuizContent(
         target.extractedText,
         target.title,
-        target.summary?.fullSummary
+        target.summary?.fullSummary,
+        6,
+        educationLevel
       );
 
       const updatedMaterial: StudyMaterial = {

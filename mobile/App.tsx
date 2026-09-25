@@ -6,6 +6,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import * as SplashScreen from 'expo-splash-screen';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ThemedNotificationHost } from './src/components/ThemedNotificationHost';
+import { ThemedLoader } from './src/components/ThemedLoader';
 import { useThemeStore } from './src/store/useThemeStore';
 import { useAuthStore } from './src/store/useAuthStore';
 import { initializeNotifications } from './src/services/notifications';
@@ -59,19 +60,7 @@ export default function App() {
               },
             ]}
           >
-            <View style={styles.splashCenterContent}>
-              <Image
-                source={
-                  isDark
-                    ? require('./assets/splash-icon-dark.png')
-                    : require('./assets/splash-icon.png')
-                }
-                style={styles.splashImage}
-                resizeMode="contain"
-              />
-            </View>
-
-            <View style={styles.splashBrandFooter}>
+            <View style={styles.splashTopCredit}>
               <Image
                 source={require('./assets/studioxenos-logo.png')}
                 style={styles.splashBrandLogo}
@@ -81,6 +70,17 @@ export default function App() {
                 Designed & Developed By StudioXenos
               </Text>
             </View>
+
+            <View style={styles.splashCenterContent}>
+              <ThemedLoader
+                title="CampusMind"
+                subtext="Your calm, daily study companion"
+                variant="primary"
+                size="large"
+              />
+            </View>
+
+            <View style={styles.splashSpacer} />
           </Animated.View>
         )}
         </View>
@@ -99,22 +99,22 @@ const styles = StyleSheet.create({
     paddingVertical: 50,
     zIndex: 99999,
   },
+  splashTopCredit: {
+    alignItems: 'center',
+    gap: 6,
+    paddingTop: 10,
+  },
   splashCenterContent: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  splashImage: {
-    width: 140,
-    height: 140,
-  },
-  splashBrandFooter: {
-    alignItems: 'center',
-    gap: 6,
+  splashSpacer: {
+    height: 40,
   },
   splashBrandLogo: {
-    width: 32,
-    height: 32,
+    width: 28,
+    height: 28,
   },
   splashBrandCaption: {
     fontSize: 12,

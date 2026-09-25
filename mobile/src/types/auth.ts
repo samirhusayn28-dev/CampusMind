@@ -1,3 +1,5 @@
+export type EducationLevel = 'Intermediate' | 'Bachelors' | 'Masters' | 'PhD';
+
 export interface UserProfile {
   uid: string;
   displayName: string;
@@ -6,10 +8,21 @@ export interface UserProfile {
   university?: string;
   major?: string;
   studyStreak: number;
+  longestStreak?: number;
   createdAt: string;
   lastLoginAt: string;
   hasCompletedOnboarding: boolean;
+  isOnboarded?: boolean;
   isAnonymous?: boolean;
+  username?: string;
+  age?: number;
+  gender?: string;
+  educationLevel?: EducationLevel;
+  totalStudyTimeMinutes?: number;
+  quizzesTaken?: number;
+  averageQuizScore?: number;
+  totalMaterialsUploaded?: number;
+  habitsCompleted?: number;
 }
 
 export interface AuthState {
@@ -19,3 +32,4 @@ export interface AuthState {
   hasCompletedOnboarding: boolean;
   error: string | null;
 }
+

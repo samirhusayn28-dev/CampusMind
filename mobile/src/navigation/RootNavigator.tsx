@@ -7,9 +7,11 @@ import { RootStackParamList } from './types';
 import { TabNavigator } from './TabNavigator';
 import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { AuthScreen } from '../screens/AuthScreen';
+import { ProfileOnboardingScreen } from '../screens/ProfileOnboardingScreen';
 import { ContentSummaryScreen } from '../screens/ContentSummaryScreen';
 import { QuizScreen } from '../screens/QuizScreen';
 import { ConceptMapScreen } from '../screens/ConceptMapScreen';
+import { ThemedLoader } from '../components/ThemedLoader';
 import { useThemeStore } from '../store/useThemeStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { typography } from '../theme/typography';
@@ -19,7 +21,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator: React.FC = () => {
   const { colors, isDark } = useThemeStore();
-  const { isAuthenticated, hasCompletedOnboarding, isLoading, initializeAuth } = useAuthStore();
+  const { user, isAuthenticated, hasCompletedOnboarding, isLoading, initializeAuth } = useAuthStore();
 
   useEffect(() => {
     initializeAuth();
@@ -40,11 +42,12 @@ export const RootNavigator: React.FC = () => {
   if (isLoading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
-        <View style={[styles.logoCircle, { backgroundColor: colors.primaryContainer }]}>
-          <Text style={{ fontSize: 32 }}>🎓</Text>
-        </View>
-        <Text style={[styles.loadingTitle, { color: colors.textPrimary }]}>CampusMind</Text>
-        <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />
+        <ThemedLoader
+          title="CampusMind"
+          subtext="Preparing your study space..."
+          variant="primary"
+          size="medium"
+        />
       </View>
     );
   }
@@ -70,6 +73,12 @@ export const RootNavigator: React.FC = () => {
           <Stack.Screen
             name="Auth"
             component={AuthScreen}
+            options={{ animation: 'fade', animationDuration: 250 }}
+          />
+        ) : !user?.isOnboarded && !user?.isAnonymous ? (
+          <Stack.Screen
+            name="ProfileOnboarding"
+            component={ProfileOnboardingScreen}
             options={{ animation: 'fade', animationDuration: 250 }}
           />
         ) : (

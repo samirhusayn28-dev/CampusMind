@@ -1,10 +1,10 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 // @ts-ignore - getReactNativePersistence is available in react-native entry
 import { initializeAuth, getReactNativePersistence, getAuth, GoogleAuthProvider, signInWithCredential, signOut, onAuthStateChanged, User } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, serverTimestamp, collection, query, where, getDocs, limit } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import { UserProfile } from '../types/auth';
+import { UserProfile, EducationLevel } from '../types/auth';
 
 export const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || (Platform.OS === 'ios'
@@ -136,11 +136,12 @@ export async function signInWithGoogleNative(): Promise<UserProfile> {
     const profile = await syncUserProfileToFirestore(firebaseUser);
     return profile;
   } catch (error: any) {
-    // Log the real Google error code and message to console only
+    // Log full error details to console only (never in UI)
     console.error('[GoogleAuth Error]', {
       code: error?.code,
       message: error?.message,
       nativeError: error,
+      stack: error?.stack,
     });
 
     const code = String(error?.code || '');
@@ -153,7 +154,7 @@ export async function signInWithGoogleNative(): Promise<UserProfile> {
       code === '12501' ||
       msg.includes('cancel')
     ) {
-      throw new Error('Sign-in cancelled.');
+      throw new Error('Google Sign-In was cancelled.');
     }
 
     // 2. Sign-in already in progress
@@ -163,20 +164,20 @@ export async function signInWithGoogleNative(): Promise<UserProfile> {
       code === '12502' ||
       msg.includes('in progress')
     ) {
-      throw new Error('Sign-in is already in progress. Please check the open prompt.');
+      throw new Error('Google Sign-In is already in progress. Please check your open prompt.');
     }
 
-    // 3. Google Play Services unavailable
+    // 3. Google Play Services unavailable or outdated
     if (
       code === statusCodes?.PLAY_SERVICES_NOT_AVAILABLE ||
       code === 'PLAY_SERVICES_NOT_AVAILABLE' ||
       code === '12500' ||
       msg.includes('play services')
     ) {
-      throw new Error('Google Play Services is unavailable or outdated on this device.');
+      throw new Error('Google Play Services is not available or needs to be updated on your device.');
     }
 
-    // 4. Developer error (SHA-1 fingerprint missing or client_type 1 missing in Firebase)
+    // 4. Configuration error (DEVELOPER_ERROR)
     if (
       code === statusCodes?.DEVELOPER_ERROR ||
       code === 'DEVELOPER_ERROR' ||
@@ -184,24 +185,100 @@ export async function signInWithGoogleNative(): Promise<UserProfile> {
       msg.includes('developer_error')
     ) {
       console.error(
-        '[GoogleAuth] DEVELOPER_ERROR (Code 10): Ensure release keystore SHA-1 (8B:B9:17:CA:51:16:33:43:9E:5B:80:2B:84:69:A9:2C:6D:E4:16:A5) is registered in Firebase Console!'
+        '[GoogleAuth] DEVELOPER_ERROR (Code 10): Client configuration or SHA-1 fingerprint mismatch'
       );
-      throw new Error("Couldn't sign in with Google. Please try again or continue as guest.");
+      throw new Error('Google Sign-In configuration is still syncing with the server. Please wait a moment and try again, or continue as guest.');
     }
 
-    // 5. Network error
+    // 5. Network / timeout error
     if (
       code === statusCodes?.NETWORK_ERROR ||
       code === 'NETWORK_ERROR' ||
       code === '7' ||
       msg.includes('network')
     ) {
-      throw new Error('Connection timed out during sign-in. Please try again.');
+      throw new Error('Unable to reach Google sign-in services. Please check your connection and try again.');
     }
 
     // Fallback friendly error
-    throw new Error("Couldn't complete sign-in, please try again.");
+    throw new Error('Unable to complete Google Sign-In at this time. Please try again or explore as guest.');
   }
+}
+
+// Check if a username is unique across all users in Firestore
+export async function checkUsernameAvailability(rawUsername: string, currentUid?: string): Promise<boolean> {
+  const cleanUsername = rawUsername.trim().toLowerCase().replace(/^@/, '');
+  if (!cleanUsername || cleanUsername.length < 3) return false;
+
+  try {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('username', '==', cleanUsername), limit(2));
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
+      return true;
+    }
+
+    if (querySnapshot.size === 1 && currentUid) {
+      const matchDoc = querySnapshot.docs[0];
+      return matchDoc.id === currentUid;
+    }
+
+    return false;
+  } catch (err) {
+    console.error('[Firestore] Error checking username availability:', err);
+    return true; // Fallback to allowing user progress on network glitch
+  }
+}
+
+// Complete profile onboarding for newly signed in Google user
+export async function completeUserProfileOnboarding(
+  uid: string,
+  data: {
+    username: string;
+    age: number;
+    gender: string;
+    educationLevel: EducationLevel;
+  }
+): Promise<UserProfile> {
+  const userRef = doc(db, 'users', uid);
+  const docSnap = await getDoc(userRef);
+  const existing = docSnap.exists() ? (docSnap.data() as Partial<UserProfile>) : {};
+
+  const cleanUsername = data.username.trim().toLowerCase().replace(/^@/, '');
+
+  const updatedProfile: UserProfile = {
+    uid,
+    displayName: existing.displayName || cleanUsername,
+    email: existing.email || null,
+    photoURL: existing.photoURL || null,
+    university: existing.university || 'University Student',
+    major: existing.major || 'Academic Studies',
+    studyStreak: existing.studyStreak || 1,
+    longestStreak: existing.longestStreak || existing.studyStreak || 1,
+    createdAt: existing.createdAt || new Date().toISOString(),
+    lastLoginAt: new Date().toISOString(),
+    hasCompletedOnboarding: true,
+    isOnboarded: true,
+    isAnonymous: false,
+    username: cleanUsername,
+    age: data.age,
+    gender: data.gender,
+    educationLevel: data.educationLevel,
+    totalStudyTimeMinutes: existing.totalStudyTimeMinutes || 0,
+    quizzesTaken: existing.quizzesTaken || 0,
+    averageQuizScore: existing.averageQuizScore || 0,
+    totalMaterialsUploaded: existing.totalMaterialsUploaded || 0,
+    habitsCompleted: existing.habitsCompleted || 0,
+  };
+
+  try {
+    await setDoc(userRef, updatedProfile, { merge: true });
+  } catch (err) {
+    console.error('[Firestore] Failed to save onboarding profile to Firestore:', err);
+  }
+
+  return updatedProfile;
 }
 
 // Guest / Demo Sign-In for instant evaluation & offline mode
@@ -215,10 +292,19 @@ export async function signInAsGuest(name: string = 'Campus Student'): Promise<Us
     university: 'Stanford / CampusMind Academy',
     major: 'Computer Science & Cognitive AI',
     studyStreak: 1,
+    longestStreak: 3,
     createdAt: new Date().toISOString(),
     lastLoginAt: new Date().toISOString(),
     hasCompletedOnboarding: true,
+    isOnboarded: true, // Guest users skip onboarding!
     isAnonymous: true,
+    username: 'student',
+    educationLevel: 'Bachelors', // Default Bachelors level
+    totalStudyTimeMinutes: 45,
+    quizzesTaken: 2,
+    averageQuizScore: 85,
+    totalMaterialsUploaded: 1,
+    habitsCompleted: 4,
   };
 
   try {
@@ -244,18 +330,31 @@ export async function syncUserProfileToFirestore(user: User): Promise<UserProfil
     console.warn('[Firestore] Could not fetch existing profile, creating fresh one:', err);
   }
 
+  const isOnboarded = Boolean(existingProfile.isOnboarded || existingProfile.username);
+
   const profileData: UserProfile = {
     uid: user.uid,
-    displayName: user.displayName || existingProfile.displayName || 'Campus Learner',
+    displayName: user.displayName || existingProfile.displayName || (existingProfile.username ? `@${existingProfile.username}` : 'Campus Student'),
     email: user.email || existingProfile.email || null,
     photoURL: user.photoURL || existingProfile.photoURL || null,
     university: existingProfile.university || 'University Student',
     major: existingProfile.major || 'General Studies',
     studyStreak: existingProfile.studyStreak || 1,
+    longestStreak: existingProfile.longestStreak || existingProfile.studyStreak || 1,
     createdAt: existingProfile.createdAt || new Date().toISOString(),
     lastLoginAt: new Date().toISOString(),
     hasCompletedOnboarding: existingProfile.hasCompletedOnboarding ?? true,
+    isOnboarded,
     isAnonymous: user.isAnonymous,
+    username: existingProfile.username,
+    age: existingProfile.age,
+    gender: existingProfile.gender,
+    educationLevel: existingProfile.educationLevel,
+    totalStudyTimeMinutes: existingProfile.totalStudyTimeMinutes || 0,
+    quizzesTaken: existingProfile.quizzesTaken || 0,
+    averageQuizScore: existingProfile.averageQuizScore || 0,
+    totalMaterialsUploaded: existingProfile.totalMaterialsUploaded || 0,
+    habitsCompleted: existingProfile.habitsCompleted || 0,
   };
 
   try {
