@@ -57,7 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.warn('[Groq Quiz] Using simulated high-quality quiz for local preview');
       return res.status(200).json({
         success: true,
-        questions: generateFallbackQuiz(title, summary),
+        questions: randomizeQuestions(generateFallbackQuiz(title, summary)),
       });
     }
 
@@ -80,6 +80,12 @@ ${difficultyGuidance}
 Generate between 5 and 8 multiple-choice questions based STRICTLY on the provided study material.
 Questions must test understanding of key principles, definitions, and mechanisms — not trivial trivia.
 
+IMPORTANT ANSWER ORDER REQUIREMENT:
+- Randomize the position of the correct answer across the options!
+- Do NOT always place the correct answer as the first option.
+- Ensure the correct answer appears unpredictably across index 0, 1, 2, or 3.
+- Set correctAnswerIndex to the exact 0-based index of the correct answer.
+
 Respond ONLY with valid JSON matching this exact schema:
 {
   "questions": [
@@ -92,7 +98,7 @@ Respond ONLY with valid JSON matching this exact schema:
         "Third plausible option",
         "Fourth plausible option"
       ],
-      "correctAnswerIndex": 0,
+      "correctAnswerIndex": 2,
       "explanation": "Warm, encouraging explanation of why this answer is correct and how to remember it."
     }
   ]
@@ -141,17 +147,43 @@ Please generate ${questionCount} multiple choice practice questions in the speci
 
     return res.status(200).json({
       success: true,
-      questions,
+      questions: randomizeQuestions(questions),
     });
   } catch (error: any) {
     console.error('[Groq Quiz Generation Error]', error);
-    const fallback = generateFallbackQuiz(req.body?.title, req.body?.summary);
+    const fallback = randomizeQuestions(generateFallbackQuiz(req.body?.title, req.body?.summary));
     return res.status(200).json({
       success: true,
       questions: fallback,
       warning: 'Generated via fallback quiz engine',
     });
   }
+}
+
+function shuffleQuestionOptions(question: any) {
+  if (!question || !Array.isArray(question.options) || question.options.length <= 1) {
+    return question;
+  }
+  const originalIndex = typeof question.correctAnswerIndex === 'number' ? question.correctAnswerIndex : 0;
+  const correctOptionText = question.options[originalIndex] ?? question.options[0];
+
+  const shuffledOptions = [...question.options];
+  for (let i = shuffledOptions.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffledOptions[i], shuffledOptions[j]] = [shuffledOptions[j], shuffledOptions[i]];
+  }
+
+  const newCorrectIndex = shuffledOptions.indexOf(correctOptionText);
+  return {
+    ...question,
+    options: shuffledOptions,
+    correctAnswerIndex: newCorrectIndex !== -1 ? newCorrectIndex : 0,
+  };
+}
+
+function randomizeQuestions(questions: any[]): any[] {
+  if (!Array.isArray(questions)) return [];
+  return questions.map(shuffleQuestionOptions);
 }
 
 function generateFallbackQuiz(title?: string, summary?: any) {

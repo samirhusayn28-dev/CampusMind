@@ -90,57 +90,31 @@ export const RootNavigator: React.FC = () => {
             />
             <Stack.Screen
               name="Summary"
+              component={ContentSummaryScreen}
               options={{
                 animation: 'slide_from_right',
                 animationDuration: 280,
                 gestureEnabled: true,
               }}
-              component={({ navigation, route }: any) => (
-                <ContentSummaryScreen
-                  materialId={route.params?.materialId}
-                  onBack={() => navigation.goBack()}
-                  onNavigateToChat={() => navigation.navigate('MainTabs', { screen: 'StudyChat' })}
-                  onNavigateToQuiz={() =>
-                    navigation.navigate('Quiz', { materialId: route.params?.materialId })
-                  }
-                  onNavigateToConceptMap={() =>
-                    navigation.navigate('ConceptMap', { materialId: route.params?.materialId })
-                  }
-                />
-              )}
             />
             <Stack.Screen
               name="Quiz"
+              component={QuizScreen}
               options={{
                 animation: 'slide_from_bottom',
                 animationDuration: 300,
                 presentation: 'modal',
                 gestureEnabled: true,
               }}
-              component={({ navigation, route }: any) => (
-                <QuizScreen
-                  materialId={route.params?.materialId}
-                  onBack={() => navigation.goBack()}
-                  onNavigateToSummary={() =>
-                    navigation.navigate('Summary', { materialId: route.params?.materialId })
-                  }
-                />
-              )}
             />
             <Stack.Screen
               name="ConceptMap"
+              component={ConceptMapScreen}
               options={{
                 animation: 'slide_from_right',
                 animationDuration: 280,
                 gestureEnabled: true,
               }}
-              component={({ navigation, route }: any) => (
-                <ConceptMapScreen
-                  materialId={route.params?.materialId}
-                  onBack={() => navigation.goBack()}
-                  onNavigateToChat={() => navigation.navigate('MainTabs', { screen: 'StudyChat' })}
-                />
-              )}
             />
           </>
         )}

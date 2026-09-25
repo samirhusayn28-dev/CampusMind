@@ -26,24 +26,33 @@ import { typography } from '../theme/typography';
 import { useStudySession } from '../services/studyTimer';
 
 interface ContentSummaryScreenProps {
-  onBack: () => void;
+  onBack?: () => void;
   material?: StudyMaterial;
   materialId?: string;
   onNavigateToQuiz?: () => void;
   onNavigateToChat?: () => void;
   onNavigateToConceptMap?: () => void;
+  navigation?: any;
+  route?: any;
 }
 
 type LanguageOption = 'en' | 'roman_urdu' | 'urdu';
 
-export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = ({
-  onBack,
-  material: propMaterial,
-  materialId,
-  onNavigateToQuiz,
-  onNavigateToChat,
-  onNavigateToConceptMap,
-}) => {
+export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = (props) => {
+  const navigation = props.navigation;
+  const route = props.route;
+  const onBack = props.onBack || (() => navigation?.goBack());
+  const materialId = props.materialId ?? route?.params?.materialId;
+  const propMaterial = props.material;
+  const onNavigateToQuiz =
+    props.onNavigateToQuiz ||
+    (navigation ? () => navigation.navigate('Quiz', { materialId }) : undefined);
+  const onNavigateToChat =
+    props.onNavigateToChat ||
+    (navigation ? () => navigation.navigate('MainTabs', { screen: 'StudyChat' }) : undefined);
+  const onNavigateToConceptMap =
+    props.onNavigateToConceptMap ||
+    (navigation ? () => navigation.navigate('ConceptMap', { materialId }) : undefined);
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
   const user = useAuthStore((state) => state.user);

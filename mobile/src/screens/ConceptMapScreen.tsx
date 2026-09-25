@@ -24,9 +24,11 @@ import { ThemedLoader } from '../components/ThemedLoader';
 import { useStudySession } from '../services/studyTimer';
 
 interface ConceptMapScreenProps {
-  onBack: () => void;
+  onBack?: () => void;
   materialId?: string;
   onNavigateToChat?: () => void;
+  navigation?: any;
+  route?: any;
 }
 
 interface NodePosition {
@@ -39,11 +41,14 @@ interface NodePosition {
 const CANVAS_WIDTH = 750;
 const CANVAS_HEIGHT = 650;
 
-export const ConceptMapScreen: React.FC<ConceptMapScreenProps> = ({
-  onBack,
-  materialId,
-  onNavigateToChat,
-}) => {
+export const ConceptMapScreen: React.FC<ConceptMapScreenProps> = (props) => {
+  const navigation = props.navigation;
+  const route = props.route;
+  const onBack = props.onBack || (() => navigation?.goBack());
+  const materialId = props.materialId ?? route?.params?.materialId;
+  const onNavigateToChat =
+    props.onNavigateToChat ||
+    (navigation ? () => navigation.navigate('MainTabs', { screen: 'StudyChat' }) : undefined);
   useStudySession('concept_map');
   const { colors, isDark } = useThemeStore();
   const insets = useSafeAreaInsets();

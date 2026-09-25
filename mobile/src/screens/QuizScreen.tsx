@@ -25,16 +25,50 @@ import { db } from '../services/firebase';
 import { useStudySession } from '../services/studyTimer';
 
 interface QuizScreenProps {
-  onBack: () => void;
+  onBack?: () => void;
   materialId?: string;
   onNavigateToSummary?: () => void;
+  navigation?: any;
+  route?: any;
 }
 
-export const QuizScreen: React.FC<QuizScreenProps> = ({
-  onBack,
-  materialId,
-  onNavigateToSummary,
-}) => {
+/**
+ * Fisher-Yates shuffle for question options, accurately re-mapping correctAnswerIndex.
+ */
+function shuffleQuestionOptions(question: QuizQuestion): QuizQuestion {
+  if (!question.options || !Array.isArray(question.options) || question.options.length <= 1) {
+    return question;
+  }
+  const originalCorrectIndex = question.correctAnswerIndex ?? 0;
+  const correctOptionText = question.options[originalCorrectIndex];
+
+  const shuffled = [...question.options];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  const newCorrectIndex = shuffled.indexOf(correctOptionText);
+  return {
+    ...question,
+    options: shuffled,
+    correctAnswerIndex: newCorrectIndex !== -1 ? newCorrectIndex : 0,
+  };
+}
+
+function shuffleAllQuestions(questionsList: QuizQuestion[]): QuizQuestion[] {
+  return questionsList.map(shuffleQuestionOptions);
+}
+
+export const QuizScreen: React.FC<QuizScreenProps> = (props) => {
+  const navigation = props.navigation;
+  const route = props.route;
+  const materialId = props.materialId ?? route?.params?.materialId;
+  const onBack = props.onBack || (() => navigation?.goBack());
+  const onNavigateToSummary =
+    props.onNavigateToSummary ||
+    (navigation ? () => navigation.navigate('Summary', { materialId }) : undefined);
+
   const { colors, isDark } = useThemeStore();
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
@@ -62,6 +96,9 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
   const [isQuizCompleted, setIsQuizCompleted] = useState(false);
   const [isLocalLoading, setIsLocalLoading] = useState(false);
 
+  // Guard against re-fetching the same material
+  const lastLoadedMaterialIdRef = useRef<string | null>(null);
+
   // Animation for feedback card
   const feedbackFadeAnim = useRef(new Animated.Value(0)).current;
   const feedbackSlideAnim = useRef(new Animated.Value(20)).current;
@@ -70,8 +107,12 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
   const progressAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (isQuizCompleted) return;
+    if (!currentMaterial?.id) return;
+    if (lastLoadedMaterialIdRef.current === currentMaterial.id) return;
+    lastLoadedMaterialIdRef.current = currentMaterial.id;
     loadOrGenerateQuiz();
-  }, [currentMaterial?.id]);
+  }, [currentMaterial?.id, isQuizCompleted]);
 
   useEffect(() => {
     if (questions.length > 0) {
@@ -84,11 +125,15 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
   }, [currentIndex, questions.length]);
 
   const loadOrGenerateQuiz = async () => {
-    if (!currentMaterial) return;
+    if (!currentMaterial || isQuizCompleted) return;
 
     if (currentMaterial.quiz && currentMaterial.quiz.length > 0) {
-      setQuestions(currentMaterial.quiz);
-      resetQuizState();
+      setQuestions(shuffleAllQuestions(currentMaterial.quiz));
+      setCurrentIndex(0);
+      setSelectedOptionIndex(null);
+      setHasAnswered(false);
+      setUserAnswers([]);
+      setIsQuizCompleted(false);
       return;
     }
 
@@ -96,8 +141,12 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
       setIsLocalLoading(true);
       try {
         const generated = await generateQuizForMaterial(currentMaterial.id, user.uid);
-        setQuestions(generated);
-        resetQuizState();
+        setQuestions(shuffleAllQuestions(generated));
+        setCurrentIndex(0);
+        setSelectedOptionIndex(null);
+        setHasAnswered(false);
+        setUserAnswers([]);
+        setIsQuizCompleted(false);
       } catch (err) {
         console.error('Failed to generate quiz:', err);
       } finally {
@@ -112,6 +161,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
     setHasAnswered(false);
     setUserAnswers([]);
     setIsQuizCompleted(false);
+    setQuestions((prev) => shuffleAllQuestions(prev));
   };
 
   const handleSelectOption = (index: number) => {
