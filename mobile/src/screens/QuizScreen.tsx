@@ -20,6 +20,9 @@ import { spacing, borderRadius } from '../theme/spacing';
 import { QuizQuestion } from '../types/content';
 import { ThemedLoader } from '../components/ThemedLoader';
 import { triggerHaptic } from '../services/haptics';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
+import { useStudySession } from '../services/studyTimer';
 
 interface QuizScreenProps {
   onBack: () => void;
@@ -42,6 +45,8 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
     generateQuizForMaterial,
     recordMaterialReview,
   } = useContentStore();
+
+  useStudySession('quiz_screen');
 
   const currentMaterial = materialId
     ? materials.find((m) => m.id === materialId) || activeMaterial
@@ -158,12 +163,36 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
       setHasAnswered(false);
     } else {
       setIsQuizCompleted(true);
+      const correct = userAnswers.filter((a) => a.isCorrect).length;
+      const finalPercent = questions.length > 0 ? Math.round((correct / questions.length) * 100) : 0;
+
       if (currentMaterial) {
-        const correct = userAnswers.filter((a) => a.isCorrect).length;
-        const finalPercent = questions.length > 0 ? Math.round((correct / questions.length) * 100) : 0;
         recordMaterialReview(currentMaterial.id, finalPercent).catch((err) =>
           console.warn('Failed to record spaced review:', err)
         );
+      }
+
+      // Update real quiz stats immediately in Auth store and Firestore
+      if (user) {
+        const currentQuizzes = user.quizzesTaken || 0;
+        const currentAvg = user.averageQuizScore || 0;
+        const newQuizzesTaken = currentQuizzes + 1;
+        const newAvgScore = Math.round((currentAvg * currentQuizzes + finalPercent) / newQuizzesTaken);
+        useAuthStore.getState().updateUserProfile({
+          quizzesTaken: newQuizzesTaken,
+          averageQuizScore: newAvgScore,
+        });
+
+        if (!user.isAnonymous && !user.uid.startsWith('guest_')) {
+          setDoc(
+            doc(db, 'users', user.uid),
+            {
+              quizzesTaken: newQuizzesTaken,
+              averageQuizScore: newAvgScore,
+            },
+            { merge: true }
+          ).catch((err) => console.warn('[Quiz] Failed to sync quiz stats to Firestore:', err));
+        }
       }
     }
   };

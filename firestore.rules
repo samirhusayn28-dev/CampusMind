@@ -13,25 +13,35 @@ service cloud.firestore {
 
     // User document and all nested collections
     match /users/{userId} {
-      // User profile
+      // User profile document
       allow read, write: if isOwner(userId);
 
-      // Lecture notes, AI study summaries, concept maps, and quizzes
+      // User's enrolled courses and subjects
+      match /courses/{courseId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // Lecture notes, AI study summaries, concept maps, and documents
       match /materials/{materialId} {
         allow read, write: if isOwner(userId);
       }
 
-      // User preferences and configuration
+      // Habit tracker, study streaks, and daily check-offs
+      match /habits/{habitId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // Completed quizzes, question sets, and scores
+      match /quizzes/{quizId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // User preferences and settings
       match /settings/{settingDoc} {
         allow read, write: if isOwner(userId);
       }
 
-      // Habit tracker, study streaks, and daily progress
-      match /habits/{habitDoc} {
-        allow read, write: if isOwner(userId);
-      }
-
-      // Catch-all for any user subcollections
+      // Catch-all for any other user subcollections
       match /{allSubcollections=**} {
         allow read, write: if isOwner(userId);
       }

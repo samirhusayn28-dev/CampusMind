@@ -34,6 +34,7 @@ export interface HabitState {
   setDailyGoalMinutes: (minutes: number, userId?: string) => Promise<void>;
   setDailyGoalLectures: (lectures: number, userId?: string) => Promise<void>;
   setHabitStateFromCloud: (cloudData: Partial<HabitState>) => void;
+  resetHabits: () => void;
 }
 
 export const getTodayDateKey = (): string => {
@@ -58,14 +59,14 @@ const DEFAULT_HABITS: Habit[] = [
     id: 'habit_review',
     title: 'Review 1 lecture summary',
     icon: 'book-outline',
-    completedDates: [getYesterdayDateKey()], // Start with yesterday active for engaging onboarding
+    completedDates: [],
     createdAt: new Date().toISOString(),
   },
   {
     id: 'habit_quiz',
     title: 'Complete active recall quiz',
     icon: 'sparkles',
-    completedDates: [getYesterdayDateKey()],
+    completedDates: [],
     createdAt: new Date().toISOString(),
   },
   {
@@ -89,6 +90,10 @@ const calculateStreak = (
   const isTodayActive = activeDatesSet.has(today);
   const isYesterdayActive = activeDatesSet.has(yesterday);
 
+  if (!isTodayActive && !isYesterdayActive) {
+    return { currentStreak: 0, longestStreak: prevLongest || 0 };
+  }
+
   let currentStreak = 0;
   const cursor = new Date();
   if (!isTodayActive) {
@@ -110,12 +115,11 @@ const calculateStreak = (
     }
   }
 
-  // Ensure minimum streak of 1 if active today or yesterday
   if (currentStreak === 0 && (isTodayActive || isYesterdayActive)) {
     currentStreak = 1;
   }
 
-  const longestStreak = Math.max(prevLongest, currentStreak);
+  const longestStreak = Math.max(prevLongest || 0, currentStreak);
   return { currentStreak, longestStreak };
 };
 
@@ -125,12 +129,10 @@ export const useHabitStore = create<HabitState>()(
       habits: DEFAULT_HABITS,
       dailyGoalMinutes: 30,
       dailyGoalLectures: 2,
-      studyStatsByDate: {
-        [getYesterdayDateKey()]: { minutesStudied: 25, lecturesCompleted: 1 },
-      },
-      currentStreak: 2,
-      longestStreak: 5,
-      lastActiveDate: getYesterdayDateKey(),
+      studyStatsByDate: {},
+      currentStreak: 0,
+      longestStreak: 0,
+      lastActiveDate: null,
 
       toggleHabit: async (habitId, dateKey, userId) => {
         const targetDate = dateKey || getTodayDateKey();
@@ -163,12 +165,23 @@ export const useHabitStore = create<HabitState>()(
           state.longestStreak
         );
 
+        const totalHabitsCompleted = updatedHabits.reduce(
+          (acc, h) => acc + h.completedDates.length,
+          0
+        );
+
         set({
           habits: updatedHabits,
           currentStreak,
           longestStreak,
           lastActiveDate: targetDate,
         });
+
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { useAuthStore } = require('./useAuthStore');
+          useAuthStore.getState().updateUserProfile({ habitsCompleted: totalHabitsCompleted });
+        } catch {}
 
         if (userId) {
           syncHabitsToCloud(userId, get());
@@ -269,6 +282,18 @@ export const useHabitStore = create<HabitState>()(
           ...state,
           ...cloudData,
         }));
+      },
+
+      resetHabits: () => {
+        set({
+          habits: DEFAULT_HABITS.map((h) => ({ ...h, completedDates: [] })),
+          dailyGoalMinutes: 30,
+          dailyGoalLectures: 2,
+          studyStatsByDate: {},
+          currentStreak: 0,
+          longestStreak: 0,
+          lastActiveDate: null,
+        });
       },
     }),
     {

@@ -23,6 +23,7 @@ export interface UserProfile {
   averageQuizScore?: number;
   totalMaterialsUploaded?: number;
   habitsCompleted?: number;
+  customSubjects?: string[];
 }
 
 export interface AuthState {

@@ -91,8 +91,8 @@ export async function syncHabitsToCloud(userId: string, habitState: any): Promis
         dailyGoalMinutes: dailyGoalMinutes || 30,
         dailyGoalLectures: dailyGoalLectures || 2,
         studyStatsByDate: studyStatsByDate || {},
-        currentStreak: currentStreak || 1,
-        longestStreak: longestStreak || 1,
+        currentStreak: currentStreak ?? 0,
+        longestStreak: longestStreak ?? 0,
         lastActiveDate: lastActiveDate || null,
         updatedAt: serverTimestamp(),
       },
@@ -118,8 +118,8 @@ export async function loadCloudHabits(userId: string, applyHabitState: (data: an
         dailyGoalMinutes: data.dailyGoalMinutes || 30,
         dailyGoalLectures: data.dailyGoalLectures || 2,
         studyStatsByDate: data.studyStatsByDate || {},
-        currentStreak: data.currentStreak || 1,
-        longestStreak: data.longestStreak || 1,
+        currentStreak: data.currentStreak ?? 0,
+        longestStreak: data.longestStreak ?? 0,
         lastActiveDate: data.lastActiveDate || null,
       });
     }

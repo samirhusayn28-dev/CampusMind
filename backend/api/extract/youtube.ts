@@ -1,5 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { YoutubeTranscript } from 'youtube-transcript';
+import {
+  YoutubeTranscript,
+  YoutubeTranscriptTooManyRequestError,
+  YoutubeTranscriptVideoUnavailableError,
+  YoutubeTranscriptDisabledError,
+  YoutubeTranscriptNotAvailableError,
+  YoutubeTranscriptNotAvailableLanguageError,
+} from 'youtube-transcript';
 
 // Extract 11-character video ID from varied YouTube URL formats
 function extractVideoId(url: string): string | null {
@@ -29,19 +36,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { url } = req.body || {};
 
     if (!url) {
-      return res.status(400).json({ error: 'Missing required YouTube url in request body' });
+      return res.status(400).json({ error: 'Please enter a valid YouTube video URL.' });
     }
 
     const videoId = extractVideoId(url);
     if (!videoId) {
-      return res.status(400).json({ error: 'Invalid YouTube URL or could not parse video ID' });
+      return res.status(400).json({ error: 'Please enter a valid YouTube video URL.' });
     }
 
-    const transcriptItems = await YoutubeTranscript.fetchTranscript(videoId);
+    // 1. Try English first, then fallback to any available caption track
+    let transcriptItems: Array<{ text: string; duration: number; offset: number }> | null = null;
+
+    try {
+      transcriptItems = await YoutubeTranscript.fetchTranscript(videoId, { lang: 'en' });
+    } catch (enErr) {
+      // English captions not available or failed; attempt fallback to default/any available track
+      try {
+        transcriptItems = await YoutubeTranscript.fetchTranscript(videoId);
+      } catch (fallbackErr) {
+        throw fallbackErr;
+      }
+    }
 
     if (!transcriptItems || transcriptItems.length === 0) {
-      return res.status(404).json({
-        error: 'No subtitles or transcript available for this YouTube video.',
+      return res.status(422).json({
+        error: 'This video does not have subtitles or captions enabled. Please try a video with captions, or paste the lecture notes directly.',
       });
     }
 
@@ -68,8 +87,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (error: any) {
     console.error('[YouTube Extraction Error]', error);
+
+    const msg = error?.message || '';
+
+    // Categorize errors cleanly
+    if (
+      error instanceof YoutubeTranscriptTooManyRequestError ||
+      msg.includes('too many requests') ||
+      msg.includes('captcha')
+    ) {
+      return res.status(429).json({
+        error: 'YouTube is temporarily rate-limiting requests. Please try again in a few minutes or paste the transcript manually.',
+      });
+    }
+
+    if (
+      error instanceof YoutubeTranscriptVideoUnavailableError ||
+      msg.includes('no longer available') ||
+      msg.includes('private')
+    ) {
+      return res.status(403).json({
+        error: 'This video is private or restricted.',
+      });
+    }
+
+    if (
+      error instanceof YoutubeTranscriptDisabledError ||
+      error instanceof YoutubeTranscriptNotAvailableError ||
+      error instanceof YoutubeTranscriptNotAvailableLanguageError ||
+      msg.includes('Transcript is disabled') ||
+      msg.includes('No transcripts are available')
+    ) {
+      return res.status(422).json({
+        error: 'This video does not have subtitles or captions enabled. Please try a video with captions, or paste the lecture notes directly.',
+      });
+    }
+
     return res.status(500).json({
-      error: 'Failed to extract transcript from YouTube video',
+      error: 'This video does not have subtitles or captions enabled. Please try a video with captions, or paste the lecture notes directly.',
       details: error.message,
     });
   }

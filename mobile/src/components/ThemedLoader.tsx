@@ -88,20 +88,20 @@ export const ThemedLoader: React.FC<ThemedLoaderProps> = ({
   const [currentStageIdx, setCurrentStageIdx] = useState(0);
   const textFadeAnim = useRef(new Animated.Value(1)).current;
 
-  // Orbit and Pulse Animations
+  // Orbit and Pulse Animations (Snappy ~2x accelerated cycles)
   useEffect(() => {
     const pulseLoop = Animated.loop(
       Animated.sequence([
         Animated.parallel([
           Animated.timing(pulseAnim, {
             toValue: 1.14,
-            duration: 1600,
+            duration: 600,
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
           Animated.timing(haloOpacity, {
             toValue: 0.18,
-            duration: 1600,
+            duration: 600,
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
@@ -109,13 +109,13 @@ export const ThemedLoader: React.FC<ThemedLoaderProps> = ({
         Animated.parallel([
           Animated.timing(pulseAnim, {
             toValue: 0.94,
-            duration: 1600,
+            duration: 600,
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
           Animated.timing(haloOpacity, {
             toValue: 0.55,
-            duration: 1600,
+            duration: 600,
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
@@ -126,7 +126,7 @@ export const ThemedLoader: React.FC<ThemedLoaderProps> = ({
     const orbitLoop = Animated.loop(
       Animated.timing(rotateAnim, {
         toValue: 1,
-        duration: 3800,
+        duration: 1300,
         easing: Easing.linear,
         useNativeDriver: true,
       })
@@ -135,7 +135,7 @@ export const ThemedLoader: React.FC<ThemedLoaderProps> = ({
     const reverseOrbitLoop = Animated.loop(
       Animated.timing(reverseRotateAnim, {
         toValue: 1,
-        duration: 5400,
+        duration: 1800,
         easing: Easing.linear,
         useNativeDriver: true,
       })
@@ -152,24 +152,24 @@ export const ThemedLoader: React.FC<ThemedLoaderProps> = ({
     };
   }, [pulseAnim, haloOpacity, rotateAnim, reverseRotateAnim]);
 
-  // Stage text cycling effect
+  // Stage text cycling effect (Snappy 1.25s cadence with 150ms crossfade)
   useEffect(() => {
     if (!stages || stages.length <= 1) return;
 
     const interval = setInterval(() => {
       Animated.timing(textFadeAnim, {
         toValue: 0,
-        duration: 250,
+        duration: 150,
         useNativeDriver: true,
       }).start(() => {
         setCurrentStageIdx((prev) => (prev + 1) % stages.length);
         Animated.timing(textFadeAnim, {
           toValue: 1,
-          duration: 350,
+          duration: 150,
           useNativeDriver: true,
         }).start();
       });
-    }, 2800);
+    }, 1250);
 
     return () => clearInterval(interval);
   }, [stages, textFadeAnim]);

@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 // @ts-ignore - getReactNativePersistence is available in react-native entry
-import { initializeAuth, getReactNativePersistence, getAuth, GoogleAuthProvider, signInWithCredential, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { initializeAuth, getReactNativePersistence, getAuth, GoogleAuthProvider, signInWithCredential, signInAnonymously, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, serverTimestamp, collection, query, where, getDocs, limit } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
@@ -270,6 +270,7 @@ export async function completeUserProfileOnboarding(
     averageQuizScore: existing.averageQuizScore || 0,
     totalMaterialsUploaded: existing.totalMaterialsUploaded || 0,
     habitsCompleted: existing.habitsCompleted || 0,
+    customSubjects: existing.customSubjects || [],
   };
 
   try {
@@ -283,28 +284,38 @@ export async function completeUserProfileOnboarding(
 
 // Guest / Demo Sign-In for instant evaluation & offline mode
 export async function signInAsGuest(name: string = 'Campus Student'): Promise<UserProfile> {
-  const guestUid = `guest_${Date.now()}`;
+  let guestUid = `guest_${Date.now()}`;
+  try {
+    const anonRes = await signInAnonymously(auth);
+    if (anonRes.user?.uid) {
+      guestUid = anonRes.user.uid;
+    }
+  } catch (anonErr) {
+    console.warn('[Firebase Auth] Anonymous sign-in fallback to local guest UID:', anonErr);
+  }
+
   const guestProfile: UserProfile = {
     uid: guestUid,
     displayName: name,
     email: 'guest.student@campusmind.edu',
     photoURL: null,
     university: 'Stanford / CampusMind Academy',
-    major: 'Computer Science & Cognitive AI',
-    studyStreak: 1,
-    longestStreak: 3,
+    major: 'General Studies',
+    studyStreak: 0,
+    longestStreak: 0,
     createdAt: new Date().toISOString(),
     lastLoginAt: new Date().toISOString(),
     hasCompletedOnboarding: true,
-    isOnboarded: true, // Guest users skip onboarding!
+    isOnboarded: true, // Guest users skip onboarding
     isAnonymous: true,
     username: 'student',
-    educationLevel: 'Bachelors', // Default Bachelors level
-    totalStudyTimeMinutes: 45,
-    quizzesTaken: 2,
-    averageQuizScore: 85,
-    totalMaterialsUploaded: 1,
-    habitsCompleted: 4,
+    educationLevel: 'Bachelors',
+    totalStudyTimeMinutes: 0,
+    quizzesTaken: 0,
+    averageQuizScore: 0,
+    totalMaterialsUploaded: 0,
+    habitsCompleted: 0,
+    customSubjects: [],
   };
 
   try {
@@ -339,8 +350,8 @@ export async function syncUserProfileToFirestore(user: User): Promise<UserProfil
     photoURL: user.photoURL || existingProfile.photoURL || null,
     university: existingProfile.university || 'University Student',
     major: existingProfile.major || 'General Studies',
-    studyStreak: existingProfile.studyStreak || 1,
-    longestStreak: existingProfile.longestStreak || existingProfile.studyStreak || 1,
+    studyStreak: existingProfile.studyStreak || 0,
+    longestStreak: existingProfile.longestStreak || 0,
     createdAt: existingProfile.createdAt || new Date().toISOString(),
     lastLoginAt: new Date().toISOString(),
     hasCompletedOnboarding: existingProfile.hasCompletedOnboarding ?? true,
@@ -355,6 +366,7 @@ export async function syncUserProfileToFirestore(user: User): Promise<UserProfil
     averageQuizScore: existingProfile.averageQuizScore || 0,
     totalMaterialsUploaded: existingProfile.totalMaterialsUploaded || 0,
     habitsCompleted: existingProfile.habitsCompleted || 0,
+    customSubjects: existingProfile.customSubjects || [],
   };
 
   try {
@@ -391,5 +403,32 @@ export async function signOutUser(): Promise<void> {
     await AsyncStorage.removeItem('@campusmind_guest_user');
   } catch (e) {
     // Ignore
+  }
+}
+
+// Add and persist a custom user subject in Firestore
+export async function addCustomSubjectToFirestore(uid: string, newSubject: string): Promise<string[]> {
+  const cleanSubject = newSubject.trim();
+  if (!cleanSubject) return [];
+
+  const userRef = doc(db, 'users', uid);
+  try {
+    const docSnap = await getDoc(userRef);
+    const existing = docSnap.exists() ? (docSnap.data() as Partial<UserProfile>) : {};
+    const currentSubjects: string[] = existing.customSubjects || [];
+
+    const alreadyExists = currentSubjects.some(
+      (s) => s.trim().toLowerCase() === cleanSubject.toLowerCase()
+    );
+    if (alreadyExists) {
+      return currentSubjects;
+    }
+
+    const updated = [...currentSubjects, cleanSubject];
+    await setDoc(userRef, { customSubjects: updated }, { merge: true });
+    return updated;
+  } catch (err) {
+    console.error('[Firestore] Failed to save custom subject:', err);
+    return [cleanSubject];
   }
 }

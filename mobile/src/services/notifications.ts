@@ -234,11 +234,14 @@ export async function initializeNotifications(): Promise<boolean> {
       await Notifications.setNotificationChannelAsync('study-reminders', {
         name: 'Study Reminders & Revision',
         description: 'Notifications for study streaks, spaced repetition, and lecture recaps',
-        importance: Notifications.AndroidImportance.HIGH,
+        importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#2D4F3A',
+        lightColor: '#FD5607',
         sound: 'default',
+        enableVibrate: true,
+        showBadge: true,
       });
+      console.log('[Notifications] Android channel "study-reminders" configured successfully.');
     }
 
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -249,26 +252,28 @@ export async function initializeNotifications(): Promise<boolean> {
       finalStatus = status;
     }
 
-    return finalStatus === 'granted';
+    const granted = finalStatus === 'granted';
+    console.log('[Notifications] Permission status:', finalStatus, 'Granted:', granted);
+    return granted;
   } catch (err) {
-    console.warn('[Notifications] Initialization or permission error:', err);
+    console.error('[Notifications] Initialization or permission error:', err);
     return false;
   }
 }
 
 /**
  * Calculates next notification date within waking hours: 9:00 AM to 9:00 PM local time.
- * If target time falls outside 9:00 AM - 9:00 PM, clamp to 10:00 AM next morning.
  */
-function getNextWakingHourDate(targetHour: number = 18, targetMinute: number = 0): Date {
+function getNextWakingHourDate(targetHour: number = 18, targetMinute: number = 0, dayOffset: number = 0): Date {
   const date = new Date();
+  date.setDate(date.getDate() + dayOffset);
   
   // Clamp hour to 9..20 (9 AM to 8 PM)
   const safeHour = Math.min(Math.max(targetHour, 9), 20);
   date.setHours(safeHour, targetMinute, 0, 0);
 
   // If time has passed today, schedule for tomorrow
-  if (date.getTime() <= Date.now()) {
+  if (date.getTime() <= Date.now() + 60000) {
     date.setDate(date.getDate() + 1);
   }
 
@@ -278,10 +283,16 @@ function getNextWakingHourDate(targetHour: number = 18, targetMinute: number = 0
 /**
  * Schedules a study reminder notification based on user settings
  */
-export async function scheduleStudyReminder(customCategory?: NotificationCategory): Promise<string | null> {
+export async function scheduleStudyReminder(
+  customCategory?: NotificationCategory,
+  dayOffset: number = 0
+): Promise<string | null> {
   try {
     const settings = useSettingsStore.getState();
-    if (!settings.studyRemindersEnabled) return null;
+    if (!settings.studyRemindersEnabled) {
+      console.log('[Notifications] Reminders disabled in settings, skipping schedule');
+      return null;
+    }
 
     // Filter messages by enabled categories
     const allowedCategories: NotificationCategory[] = [];
@@ -290,7 +301,10 @@ export async function scheduleStudyReminder(customCategory?: NotificationCategor
     if (settings.notificationStreak) allowedCategories.push('streak');
     if (settings.notificationRevision) allowedCategories.push('revision');
 
-    if (allowedCategories.length === 0) return null;
+    if (allowedCategories.length === 0) {
+      console.log('[Notifications] No notification categories enabled, skipping schedule');
+      return null;
+    }
 
     const targetCategory =
       customCategory && allowedCategories.includes(customCategory)
@@ -305,7 +319,7 @@ export async function scheduleStudyReminder(customCategory?: NotificationCategor
     const targetHour = parseInt(hStr, 10) || 18;
     const targetMinute = parseInt(mStr, 10) || 0;
 
-    const triggerDate = getNextWakingHourDate(targetHour, targetMinute);
+    const triggerDate = getNextWakingHourDate(targetHour, targetMinute, dayOffset);
 
     const notificationId = await Notifications.scheduleNotificationAsync({
       content: {
@@ -317,13 +331,77 @@ export async function scheduleStudyReminder(customCategory?: NotificationCategor
       } as any,
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: triggerDate,
-      },
+        date: triggerDate.getTime(),
+        channelId: 'study-reminders',
+      } as any,
     });
+
+    console.log(
+      `[Notifications] Successfully scheduled reminder (${chosen.category}) ID: ${notificationId} for ${triggerDate.toLocaleString()}`
+    );
 
     return notificationId;
   } catch (err) {
-    console.warn('[Notifications] Scheduling error:', err);
+    console.error('[Notifications] Scheduling error:', err);
+    return null;
+  }
+}
+
+/**
+ * Reschedules reminders according to current user preferences
+ */
+export async function rescheduleAllReminders(): Promise<void> {
+  try {
+    const isGranted = await initializeNotifications();
+    if (!isGranted) {
+      console.warn('[Notifications] Cannot reschedule reminders: permission not granted');
+      return;
+    }
+
+    await cancelAllReminders();
+
+    const settings = useSettingsStore.getState();
+    if (!settings.studyRemindersEnabled) return;
+
+    // Schedule next 2 upcoming reminders (today/tomorrow, day after tomorrow)
+    await scheduleStudyReminder(undefined, 0);
+    await scheduleStudyReminder(undefined, 1);
+  } catch (err) {
+    console.error('[Notifications] Error rescheduling all reminders:', err);
+  }
+}
+
+/**
+ * Schedule a quick test notification to verify delivery on-device
+ */
+export async function scheduleTestReminder(delaySeconds: number = 10): Promise<string | null> {
+  try {
+    const isGranted = await initializeNotifications();
+    if (!isGranted) {
+      console.warn('[Notifications] Test reminder aborted: permission not granted');
+      return null;
+    }
+
+    const testNotificationId = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Study Reminder Test 🎯',
+        body: 'Notifications are working! Your study streak and revision alerts will arrive on schedule.',
+        sound: 'default',
+        channelId: 'study-reminders',
+        data: { test: true },
+      } as any,
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: Math.max(3, delaySeconds),
+        repeats: false,
+        channelId: 'study-reminders',
+      } as any,
+    });
+
+    console.log(`[Notifications] Test reminder scheduled (fires in ${delaySeconds}s) ID: ${testNotificationId}`);
+    return testNotificationId;
+  } catch (err) {
+    console.error('[Notifications] Error scheduling test reminder:', err);
     return null;
   }
 }
@@ -334,6 +412,7 @@ export async function scheduleStudyReminder(customCategory?: NotificationCategor
 export async function cancelAllReminders(): Promise<void> {
   try {
     await Notifications.cancelAllScheduledNotificationsAsync();
+    console.log('[Notifications] Cancelled all scheduled notifications');
   } catch (err) {
     console.warn('[Notifications] Cancel error:', err);
   }

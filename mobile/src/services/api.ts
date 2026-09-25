@@ -1,5 +1,6 @@
 import NetInfo from '@react-native-community/netinfo';
 import { ConceptMapData } from '../types/content';
+import { auth } from './firebase';
 
 /**
  * CampusMind API Client
@@ -83,13 +84,34 @@ async function requestBackend<T = any>(
     throw new Error('No internet connection. Please check your network and try again.');
   }
 
+  // 2. Attach Firebase ID token if user is authenticated
+  const headers: Record<string, string> = {
+    ...((options.headers as Record<string, string>) || {}),
+  };
+
+  try {
+    if (auth?.currentUser && typeof auth.currentUser.getIdToken === 'function') {
+      const idToken = await auth.currentUser.getIdToken();
+      if (idToken) {
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+    }
+  } catch (tokErr) {
+    console.warn('[API Auth] Failed to retrieve Firebase ID token:', tokErr);
+  }
+
+  const enrichedOptions: RequestInit = {
+    ...options,
+    headers,
+  };
+
   let response: Response;
   const fullUrl = `${BACKEND_URL}${endpoint}`;
 
   try {
-    response = await fetch(fullUrl, options);
+    response = await fetch(fullUrl, enrichedOptions);
   } catch (fetchErr: any) {
-    // 2. Fetch failed — verify if device actually dropped offline
+    // Fetch failed — verify if device actually dropped offline
     const isOnline = await isNetworkConnected();
     console.error(`[API Network Exception] ${endpoint}:`, fetchErr);
 
@@ -142,14 +164,46 @@ async function requestBackend<T = any>(
       );
     }
 
+    if (status === 401) {
+      throw new Error(
+        sanitizeErrorMessage(
+          serverMsg,
+          'Your session has expired or requires authentication. Please sign in again.'
+        )
+      );
+    }
+
+    if (status === 403) {
+      throw new Error(
+        sanitizeErrorMessage(
+          serverMsg,
+          'Access to this content is restricted or private.'
+        )
+      );
+    }
+
     if (status === 404) {
       throw new Error(
         sanitizeErrorMessage(serverMsg, 'The requested study resource was not found. Please try again.')
       );
     }
 
+    if (status === 422) {
+      throw new Error(
+        sanitizeErrorMessage(
+          serverMsg,
+          'This video does not have subtitles or captions enabled. Please try a video with captions, or paste the lecture notes directly.'
+        )
+      );
+    }
+
     if (status === 429) {
-      throw new Error('High request volume right now. Please wait a few seconds and try again.');
+      throw new Error(
+        sanitizeErrorMessage(
+          serverMsg,
+          'High request volume right now. Please wait a few seconds and try again.'
+        )
+      );
     }
 
     // Default 500 / other errors
@@ -215,7 +269,7 @@ export async function extractYouTubeTranscript(url: string): Promise<ExtractionR
 
   const text = (data.text || '').trim();
   if (!text || text.length < 20) {
-    throw new Error('No transcript could be extracted from this YouTube video. Please verify English captions are enabled.');
+    throw new Error('This video does not have subtitles or captions enabled. Please try a video with captions, or paste the lecture notes directly.');
   }
 
   return {

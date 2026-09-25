@@ -21,6 +21,7 @@ import { typography } from '../theme/typography';
 import { spacing, borderRadius } from '../theme/spacing';
 import { ConceptNode, ConceptEdge, ConceptMapData, StudyMaterial } from '../types/content';
 import { ThemedLoader } from '../components/ThemedLoader';
+import { useStudySession } from '../services/studyTimer';
 
 interface ConceptMapScreenProps {
   onBack: () => void;
@@ -43,6 +44,7 @@ export const ConceptMapScreen: React.FC<ConceptMapScreenProps> = ({
   materialId,
   onNavigateToChat,
 }) => {
+  useStudySession('concept_map');
   const { colors, isDark } = useThemeStore();
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();

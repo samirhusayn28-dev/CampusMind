@@ -9,7 +9,7 @@ import { ThemedNotificationHost } from './src/components/ThemedNotificationHost'
 import { ThemedLoader } from './src/components/ThemedLoader';
 import { useThemeStore } from './src/store/useThemeStore';
 import { useAuthStore } from './src/store/useAuthStore';
-import { initializeNotifications } from './src/services/notifications';
+import { initializeNotifications, rescheduleAllReminders } from './src/services/notifications';
 
 // Prevent the native splash screen from auto-hiding while resources and auth are loading
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -21,7 +21,13 @@ export default function App() {
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    initializeNotifications().catch(() => {});
+    initializeNotifications()
+      .then((granted) => {
+        if (granted) {
+          rescheduleAllReminders().catch(() => {});
+        }
+      })
+      .catch((err) => console.warn('[App] Notification init error:', err));
   }, []);
 
   useEffect(() => {
@@ -29,10 +35,10 @@ export default function App() {
       // Dismiss native splash screen
       SplashScreen.hideAsync().catch(() => {});
 
-      // Gentle fade out transition to app UI
+      // Snappy fade out transition to app UI
       Animated.timing(fadeAnim, {
         toValue: 0,
-        duration: 450,
+        duration: 200,
         useNativeDriver: true,
       }).start(() => {
         setSplashAnimationDone(true);

@@ -23,6 +23,7 @@ import { showThemedAlert } from '../store/useNotificationStore';
 import { speakText, stopSpeech, pauseSpeech, resumeSpeech } from '../services/speech';
 import { spacing, borderRadius, shadows } from '../theme/spacing';
 import { typography } from '../theme/typography';
+import { useStudySession } from '../services/studyTimer';
 
 interface ContentSummaryScreenProps {
   onBack: () => void;
@@ -46,6 +47,7 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = ({
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
   const user = useAuthStore((state) => state.user);
+  useStudySession('content_summary');
   const {
     activeMaterial,
     materials,

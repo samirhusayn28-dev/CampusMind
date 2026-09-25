@@ -20,7 +20,9 @@ import {
   SpeechPlaybackRate,
 } from '../store/useSettingsStore';
 import { useContentStore } from '../store/useContentStore';
+import { useHabitStore } from '../store/useHabitStore';
 import { triggerHaptic } from '../services/haptics';
+import { rescheduleAllReminders, scheduleTestReminder } from '../services/notifications';
 import { Header } from '../components/Header';
 import { Card } from '../components/Card';
 import { Badge } from '../components/Badge';
@@ -148,17 +150,21 @@ export const SettingsScreen: React.FC = () => {
     }
   }, [user?.createdAt]);
 
-  const totalNotes = user?.totalMaterialsUploaded ?? materials.length;
-  const quizzesTaken = user?.quizzesTaken ?? materials.filter((m) => m.quiz && m.quiz.length > 0).length;
-  const avgScore = user?.averageQuizScore ? `${user.averageQuizScore}%` : quizzesTaken > 0 ? '88%' : '—';
-  const studyStreak = user?.studyStreak || 1;
-  const longestStreak = user?.longestStreak || Math.max(studyStreak, 3);
-  const totalMinutes = user?.totalStudyTimeMinutes || Math.max(totalNotes * 20, 45);
+  const { habits, currentStreak: habitStreak, longestStreak: habitLongestStreak } = useHabitStore();
+
+  const totalNotes = Math.max(user?.totalMaterialsUploaded || 0, materials.length);
+  const quizzesTaken = user?.quizzesTaken || 0;
+  const avgScore = user?.averageQuizScore ? `${user.averageQuizScore}%` : '—';
+  const studyStreak = user?.studyStreak ?? habitStreak ?? 0;
+  const longestStreak = user?.longestStreak ?? habitLongestStreak ?? 0;
+  const totalMinutes = user?.totalStudyTimeMinutes || 0;
   const studyTimeFormatted =
     totalMinutes >= 60
       ? `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`
       : `${totalMinutes}m`;
-  const habitsCount = user?.habitsCompleted || 14;
+  const habitsCount = user?.habitsCompleted !== undefined
+    ? user.habitsCompleted
+    : habits.reduce((acc, h) => acc + (h.completedDates?.length || 0), 0);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -298,6 +304,7 @@ export const SettingsScreen: React.FC = () => {
               onValueChange={(val) => {
                 triggerHaptic('selection');
                 setStudyRemindersEnabled(val);
+                rescheduleAllReminders().catch(() => {});
               }}
               trackColor={{ false: colors.border, true: colors.primary }}
               thumbColor={colors.surface}
@@ -320,6 +327,7 @@ export const SettingsScreen: React.FC = () => {
                   onValueChange={(val) => {
                     triggerHaptic('selection');
                     setNotificationInactivity(val);
+                    rescheduleAllReminders().catch(() => {});
                   }}
                   trackColor={{ false: colors.border, true: colors.primary }}
                   thumbColor={colors.surface}
@@ -340,6 +348,7 @@ export const SettingsScreen: React.FC = () => {
                   onValueChange={(val) => {
                     triggerHaptic('selection');
                     setNotificationCourses(val);
+                    rescheduleAllReminders().catch(() => {});
                   }}
                   trackColor={{ false: colors.border, true: colors.primary }}
                   thumbColor={colors.surface}
@@ -360,6 +369,7 @@ export const SettingsScreen: React.FC = () => {
                   onValueChange={(val) => {
                     triggerHaptic('selection');
                     setNotificationStreak(val);
+                    rescheduleAllReminders().catch(() => {});
                   }}
                   trackColor={{ false: colors.border, true: colors.primary }}
                   thumbColor={colors.surface}
@@ -380,11 +390,33 @@ export const SettingsScreen: React.FC = () => {
                   onValueChange={(val) => {
                     triggerHaptic('selection');
                     setNotificationRevision(val);
+                    rescheduleAllReminders().catch(() => {});
                   }}
                   trackColor={{ false: colors.border, true: colors.primary }}
                   thumbColor={colors.surface}
                 />
               </View>
+
+              <View style={[styles.divider, { backgroundColor: colors.borderSubtle }]} />
+
+              <TouchableOpacity
+                style={[styles.testReminderBtn, { backgroundColor: colors.surfaceSubtle }]}
+                onPress={async () => {
+                  triggerHaptic('lightImpact');
+                  const testId = await scheduleTestReminder(5);
+                  if (testId) {
+                    showThemedToast('success', 'Test reminder scheduled! It will arrive in 5 seconds.');
+                  } else {
+                    showThemedAlert('Permission Required', 'Please enable notification permissions in your device settings.');
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="notifications-outline" size={16} color={colors.primary} />
+                <Text style={[styles.testReminderText, { color: colors.primary }]}>
+                  Send Test Notification (5s)
+                </Text>
+              </TouchableOpacity>
             </>
           )}
         </Card>
@@ -819,5 +851,18 @@ const styles = StyleSheet.create({
     ...typography.presets.titleMedium,
     fontWeight: '700',
     letterSpacing: 0.3,
+  },
+  testReminderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs + 2,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: borderRadius.md,
+    marginTop: spacing.xs,
+  },
+  testReminderText: {
+    ...typography.presets.labelMedium,
+    fontWeight: '700',
   },
 });

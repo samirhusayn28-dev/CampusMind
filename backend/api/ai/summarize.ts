@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Groq from 'groq-sdk';
 import { GROQ_MODELS, extractJson } from '../_utils/ai.js';
+import { verifyAuth, checkRateLimit } from '../_utils/auth.js';
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY || '',
@@ -20,6 +21,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  // 1. Verify Firebase authentication
+  const user = await verifyAuth(req);
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized. Please sign in to use CampusMind AI features.' });
+  }
+
+  // 2. Enforce per-user rate limiting (max 30 requests / minute)
+  const rateLimit = checkRateLimit(user.uid, 30, 60_000);
+  if (!rateLimit.allowed) {
+    res.setHeader('Retry-After', rateLimit.retryAfterSeconds.toString());
+    return res.status(429).json({
+      error: `Rate limit exceeded. Please wait ${rateLimit.retryAfterSeconds}s before trying again.`,
+    });
   }
 
   try {

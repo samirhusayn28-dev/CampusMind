@@ -23,8 +23,10 @@ import { spacing, borderRadius } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { ChatLanguage, ChatMessage } from '../types/chat';
 import { StudyMaterial } from '../types/content';
+import { useStudySession } from '../services/studyTimer';
 
 export const StudyChatScreen: React.FC = () => {
+  useStudySession('study_chat');
   const { colors, isDark } = useThemeStore();
   const { materials, activeMaterial, setActiveMaterial } = useContentStore();
   const {

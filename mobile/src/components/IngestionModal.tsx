@@ -9,7 +9,9 @@ import {
   ActivityIndicator,
   ScrollView,
   Platform,
+  Keyboard,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
@@ -41,7 +43,7 @@ interface IngestionModalProps {
   initialType?: ContentType;
 }
 
-const subjects = ['Computer Science', 'Biology', 'History', 'Physics', 'Psychology', 'General'];
+const DEFAULT_SUBJECTS = ['Computer Science', 'Biology', 'History', 'Physics', 'Psychology', 'General'];
 
 export const IngestionModal: React.FC<IngestionModalProps> = ({
   visible,
@@ -50,6 +52,7 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
 }) => {
   const { colors, isDark } = useThemeStore();
   const user = useAuthStore((state) => state.user);
+  const addCustomSubject = useAuthStore((state) => state.addCustomSubject);
   const {
     isIngesting,
     ingestionStage,
@@ -63,6 +66,25 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
   const [activeTab, setActiveTab] = useState<ContentType>(initialType);
   const [selectedSubject, setSelectedSubject] = useState('Computer Science');
 
+  // Custom Subject State & Deduplicated Dynamic List
+  const [isAddingCustomSubject, setIsAddingCustomSubject] = useState(false);
+  const [customSubjectText, setCustomSubjectText] = useState('');
+
+  const allSubjects = React.useMemo(() => {
+    const list: string[] = [...DEFAULT_SUBJECTS];
+    const customList = user?.customSubjects || [];
+
+    for (const c of customList) {
+      const clean = c.trim();
+      if (!clean) continue;
+      const exists = list.some((item) => item.toLowerCase() === clean.toLowerCase());
+      if (!exists) {
+        list.push(clean);
+      }
+    }
+    return list;
+  }, [user?.customSubjects]);
+
   // YouTube State
   const [youtubeUrl, setYoutubeUrl] = useState('');
 
@@ -71,6 +93,34 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
   const [isRecording, setIsRecording] = useState(false);
   const [recordDuration, setRecordDuration] = useState(0);
   const timerRef = useRef<any>(null);
+
+  // Safe area insets for zero-gap bottom alignment
+  const insets = useSafeAreaInsets();
+
+  // Scroll overflow detection & keyboard tracking
+  const [containerHeight, setContainerHeight] = useState(0);
+  const [contentHeight, setContentHeight] = useState(0);
+  const [ocrContainerHeight, setOcrContainerHeight] = useState(0);
+  const [ocrContentHeight, setOcrContentHeight] = useState(0);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setIsKeyboardVisible(true)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setIsKeyboardVisible(false)
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const canScroll = isKeyboardVisible || (contentHeight > containerHeight && containerHeight > 0);
+  const canOcrScroll = isKeyboardVisible || (ocrContentHeight > ocrContainerHeight && ocrContainerHeight > 0);
 
   // OCR Processing & Review State
   const [isScanningOcr, setIsScanningOcr] = useState(false);
@@ -85,10 +135,146 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
       setIsReviewingOcr(false);
       setIsScanningOcr(false);
       setIsConfirmingOcr(false);
+      setIsAddingCustomSubject(false);
+      setCustomSubjectText('');
       setOcrText('');
       setYoutubeUrl('');
     }
   }, [visible, initialType]);
+
+  const handleOpenAddCustomSubject = () => {
+    triggerHaptic('selection');
+    setIsAddingCustomSubject(true);
+    setCustomSubjectText('');
+  };
+
+  const handleSaveCustomSubject = async () => {
+    const trimmed = customSubjectText.trim();
+    if (!trimmed) {
+      setIsAddingCustomSubject(false);
+      return;
+    }
+
+    // Check if it matches existing subject (case-insensitive)
+    const existingMatch = allSubjects.find((s) => s.toLowerCase() === trimmed.toLowerCase());
+    if (existingMatch) {
+      setSelectedSubject(existingMatch);
+      setIsAddingCustomSubject(false);
+      setCustomSubjectText('');
+      triggerHaptic('selection');
+      return;
+    }
+
+    // Truly new subject
+    triggerHaptic('successNotification');
+    const savedName = await addCustomSubject(trimmed);
+    setSelectedSubject(savedName || trimmed);
+    setIsAddingCustomSubject(false);
+    setCustomSubjectText('');
+  };
+
+  const renderSubjectSelector = (disabled: boolean = false) => (
+    <View style={styles.subjectSelectorContainer}>
+      <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>Assign Course / Subject</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.subjectScroll}
+      >
+        {allSubjects.map((subj) => {
+          const isSel = selectedSubject === subj;
+          return (
+            <TouchableOpacity
+              key={subj}
+              style={[
+                styles.subjectChip,
+                { backgroundColor: isSel ? colors.primary : colors.surface },
+              ]}
+              onPress={() => {
+                triggerHaptic('selection');
+                setSelectedSubject(subj);
+                setIsAddingCustomSubject(false);
+              }}
+              disabled={disabled}
+            >
+              <Text
+                style={[
+                  styles.subjectText,
+                  { color: isSel ? colors.onPrimary : colors.textSecondary },
+                ]}
+              >
+                {subj}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+
+        {/* "+ Other" Button */}
+        <TouchableOpacity
+          style={[
+            styles.subjectChip,
+            styles.otherChip,
+            {
+              backgroundColor: isAddingCustomSubject ? colors.primaryContainer : colors.surface,
+              borderColor: isAddingCustomSubject ? colors.primary : colors.borderSubtle,
+            },
+          ]}
+          onPress={handleOpenAddCustomSubject}
+          disabled={disabled}
+        >
+          <Ionicons
+            name="add"
+            size={14}
+            color={isAddingCustomSubject ? colors.primary : colors.textSecondary}
+          />
+          <Text
+            style={[
+              styles.subjectText,
+              { color: isAddingCustomSubject ? colors.primary : colors.textSecondary },
+            ]}
+          >
+            Other
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
+
+      {/* Inline custom subject input */}
+      {isAddingCustomSubject && (
+        <View
+          style={[
+            styles.customSubjectRow,
+            {
+              backgroundColor: colors.surfaceSubtle,
+              borderColor: colors.borderSubtle,
+            },
+          ]}
+        >
+          <TextInput
+            value={customSubjectText}
+            onChangeText={setCustomSubjectText}
+            placeholder="Type course or subject name..."
+            placeholderTextColor={colors.textTertiary}
+            style={[styles.customSubjectInput, { color: colors.textPrimary }]}
+            autoFocus
+            returnKeyType="done"
+            onSubmitEditing={handleSaveCustomSubject}
+          />
+          <TouchableOpacity
+            style={[styles.customSubjectAddBtn, { backgroundColor: colors.primary }]}
+            onPress={handleSaveCustomSubject}
+          >
+            <Text style={[styles.customSubjectAddText, { color: colors.onPrimary }]}>Add</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.customSubjectCancelBtn}
+            onPress={() => setIsAddingCustomSubject(false)}
+          >
+            <Ionicons name="close-circle" size={20} color={colors.textTertiary} />
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
 
   // Clean up audio recording on unmount or close
   useEffect(() => {
@@ -352,41 +538,59 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={onClose}
+          disabled={isIngesting || isScanningOcr || isConfirmingOcr}
+        />
         <KeyboardAvoidingView
-          behavior="padding"
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ width: '100%' }}
         >
-          <View style={[styles.modalCard, { backgroundColor: colors.background }]}>
-          {/* Header */}
-          <View style={styles.modalHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
-                {isReviewingOcr ? 'Review Digitized Notes' : 'Add Study Material'}
-              </Text>
-              <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>
-                {isReviewingOcr
-                  ? 'Verify or edit your transcribed text before saving'
-                  : 'Select content source to process with AI'}
-              </Text>
+          <View
+            style={[
+              styles.modalCard,
+              {
+                backgroundColor: colors.background,
+                paddingBottom: Math.max(insets.bottom, spacing.md),
+              },
+            ]}
+          >
+            {/* Header */}
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
+                  {isReviewingOcr ? 'Review Digitized Notes' : 'Add Study Material'}
+                </Text>
+                <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>
+                  {isReviewingOcr
+                    ? 'Verify or edit your transcribed text before saving'
+                    : 'Select content source to process with AI'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.closeBtn, { backgroundColor: colors.surfaceSubtle }]}
+                onPress={onClose}
+                disabled={isIngesting || isScanningOcr || isConfirmingOcr}
+              >
+                <Ionicons name="close" size={20} color={colors.textPrimary} />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={[styles.closeBtn, { backgroundColor: colors.surfaceSubtle }]}
-              onPress={onClose}
-              disabled={isIngesting || isScanningOcr || isConfirmingOcr}
-            >
-              <Ionicons name="close" size={20} color={colors.textPrimary} />
-            </TouchableOpacity>
-          </View>
 
-          {/* If Reviewing OCR Text */}
-          {isReviewingOcr ? (
-            <ScrollView
-              style={styles.reviewScroll}
-              contentContainerStyle={styles.reviewScrollContent}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="on-drag"
-            >
+            {/* If Reviewing OCR Text */}
+            {isReviewingOcr ? (
+              <ScrollView
+                style={styles.reviewScroll}
+                contentContainerStyle={styles.reviewScrollContent}
+                scrollEnabled={canOcrScroll}
+                bounces={canOcrScroll}
+                onLayout={(e) => setOcrContainerHeight(e.nativeEvent.layout.height)}
+                onContentSizeChange={(_w, h) => setOcrContentHeight(h)}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+              >
               {/* Title Input */}
               <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>Title</Text>
               <TextInput
@@ -405,37 +609,7 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
               />
 
               {/* Subject Selector */}
-              <Text style={[styles.fieldLabel, { color: colors.textPrimary, marginTop: spacing.sm }]}>
-                Assign Course / Subject
-              </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.subjectScroll}
-              >
-                {subjects.map((subj) => {
-                  const isSel = selectedSubject === subj;
-                  return (
-                    <TouchableOpacity
-                      key={subj}
-                      style={[
-                        styles.subjectChip,
-                        { backgroundColor: isSel ? colors.primary : colors.surface },
-                      ]}
-                      onPress={() => setSelectedSubject(subj)}
-                    >
-                      <Text
-                        style={[
-                          styles.subjectText,
-                          { color: isSel ? colors.onPrimary : colors.textSecondary },
-                        ]}
-                      >
-                        {subj}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+              {renderSubjectSelector(isConfirmingOcr)}
 
               {/* Extracted Text Review Area */}
               <View style={styles.reviewTextHeaderRow}>
@@ -516,6 +690,10 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
               <ScrollView
                 style={styles.modalScroll}
                 contentContainerStyle={styles.modalScrollContent}
+                scrollEnabled={canScroll}
+                bounces={canScroll}
+                onLayout={(e) => setContainerHeight(e.nativeEvent.layout.height)}
+                onContentSizeChange={(_w, h) => setContentHeight(h)}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="on-drag"
                 showsVerticalScrollIndicator={false}
@@ -560,36 +738,7 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
                 </View>
 
                 {/* Subject Selector */}
-                <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>Assign Course / Subject</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.subjectScroll}
-                >
-                  {subjects.map((subj) => {
-                    const isSel = selectedSubject === subj;
-                    return (
-                      <TouchableOpacity
-                        key={subj}
-                        style={[
-                          styles.subjectChip,
-                          { backgroundColor: isSel ? colors.primary : colors.surface },
-                        ]}
-                        onPress={() => setSelectedSubject(subj)}
-                        disabled={isIngesting || isScanningOcr}
-                      >
-                        <Text
-                          style={[
-                            styles.subjectText,
-                            { color: isSel ? colors.onPrimary : colors.textSecondary },
-                          ]}
-                        >
-                          {subj}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
+                {renderSubjectSelector(isIngesting || isScanningOcr)}
 
                 {/* Tab Action Card Container */}
                 <View style={styles.bodyContent}>
@@ -810,8 +959,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: borderRadius.xxl,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
-    paddingBottom: Platform.OS === 'ios' ? 40 : spacing.xl,
-    maxHeight: '92%',
+    maxHeight: '90%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -857,14 +1005,52 @@ const styles = StyleSheet.create({
     ...typography.presets.labelMedium,
     marginBottom: spacing.xs,
   },
+  subjectSelectorContainer: {
+    marginBottom: spacing.xs,
+  },
   subjectScroll: {
     gap: spacing.xs + 2,
-    paddingBottom: spacing.md,
+    paddingBottom: spacing.sm,
   },
   subjectChip: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
     borderRadius: borderRadius.full,
+  },
+  otherChip: {
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  customSubjectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+  },
+  customSubjectInput: {
+    flex: 1,
+    height: 38,
+    fontSize: 14,
+    paddingHorizontal: spacing.xs,
+  },
+  customSubjectAddBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+    borderRadius: borderRadius.full,
+  },
+  customSubjectAddText: {
+    ...typography.presets.labelMedium,
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  customSubjectCancelBtn: {
+    padding: 4,
   },
   subjectText: {
     ...typography.presets.labelMedium,

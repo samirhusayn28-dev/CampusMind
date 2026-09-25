@@ -56,6 +56,23 @@ interface ContentStoreState {
   clearError: () => void;
 }
 
+function notifyMaterialCountChange(delta: number) {
+  try {
+    const user = useAuthStore.getState().user;
+    if (!user) return;
+    const currentCount = user.totalMaterialsUploaded ?? useContentStore.getState().materials.length;
+    const newCount = Math.max(0, currentCount + delta);
+    useAuthStore.getState().updateUserProfile({ totalMaterialsUploaded: newCount });
+    if (!user.isAnonymous && !user.uid.startsWith('guest_')) {
+      import('../services/firebase').then(({ db }) => {
+        import('firebase/firestore').then(({ doc, setDoc, increment }) => {
+          setDoc(doc(db, 'users', user.uid), { totalMaterialsUploaded: increment(delta) }, { merge: true }).catch(() => {});
+        });
+      });
+    }
+  } catch {}
+}
+
 export const useContentStore = create<ContentStoreState>((set, get) => ({
   materials: [],
   activeMaterial: null,
@@ -111,6 +128,7 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
       };
 
       await saveMaterial(newMaterial);
+      notifyMaterialCountChange(1);
 
       const updated = [newMaterial, ...get().materials];
       set({
@@ -164,6 +182,7 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
       };
 
       await saveMaterial(newMaterial);
+      notifyMaterialCountChange(1);
 
       const updated = [newMaterial, ...get().materials];
       set({
@@ -217,6 +236,7 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
       };
 
       await saveMaterial(newMaterial);
+      notifyMaterialCountChange(1);
 
       const updated = [newMaterial, ...get().materials];
       set({
@@ -322,6 +342,7 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
     };
 
     await saveMaterial(newMaterial);
+    notifyMaterialCountChange(1);
     const updated = [newMaterial, ...get().materials];
     set({
       materials: updated,
@@ -555,6 +576,7 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
 
   deleteMaterial: async (id: string, userId: string) => {
     await deleteMaterialFromService(userId, id);
+    notifyMaterialCountChange(-1);
     const remaining = get().materials.filter((m) => m.id !== id);
     set({
       materials: remaining,
