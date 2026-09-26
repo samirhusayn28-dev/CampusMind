@@ -10,6 +10,7 @@ import {
   ScrollView,
   Platform,
   Keyboard,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -119,7 +120,11 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
 
   const canOcrScroll = isKeyboardVisible || (ocrContentHeight > ocrContainerHeight && ocrContainerHeight > 0);
 
-  // OCR Processing & Review State
+  // OCR Processing & Review State (supports up to 10 images)
+  const [selectedOcrImages, setSelectedOcrImages] = useState<
+    { uri: string; width?: number; height?: number }[]
+  >([]);
+  const [ocrCurrentPageIndex, setOcrCurrentPageIndex] = useState<number>(0);
   const [isScanningOcr, setIsScanningOcr] = useState(false);
   const [isReviewingOcr, setIsReviewingOcr] = useState(false);
   const [ocrTitle, setOcrTitle] = useState('Handwritten Study Notes');
@@ -136,6 +141,8 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
       setCustomSubjectText('');
       setOcrText('');
       setYoutubeUrl('');
+      setSelectedOcrImages([]);
+      setOcrCurrentPageIndex(0);
     }
   }, [visible, initialType]);
 
@@ -399,9 +406,14 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
     }
   };
 
-  // Photo / OCR Preprocessing and Extraction
-  const handlePickPhoto = async (useCamera: boolean) => {
+  // Multi-Photo / OCR Handlers (supports 1 to 10 images)
+  const handlePickOcrPhotos = async (useCamera: boolean) => {
     try {
+      if (selectedOcrImages.length >= 10) {
+        showThemedAlert('Maximum Reached', 'You can select up to 10 pages per submission.');
+        return;
+      }
+
       triggerHaptic('lightImpact');
       if (useCamera) {
         const camPerm = await ImagePicker.requestCameraPermissionsAsync();
@@ -409,73 +421,142 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
           showThemedAlert('Camera Access', 'Camera permission is required to capture handwritten notes.');
           return;
         }
+
+        const result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          quality: 0.9,
+        });
+
+        if (result.canceled || !result.assets || result.assets.length === 0) return;
+
+        const asset = result.assets[0];
+        triggerHaptic('selection');
+        setSelectedOcrImages((prev) => {
+          if (prev.length >= 10) return prev;
+          return [...prev, { uri: asset.uri, width: asset.width, height: asset.height }];
+        });
       } else {
         const libPerm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!libPerm.granted) {
           showThemedAlert('Library Access', 'Photo library permission is required to select handwritten notes.');
           return;
         }
+
+        const remainingLimit = 10 - selectedOcrImages.length;
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsMultipleSelection: true,
+          selectionLimit: remainingLimit,
+          quality: 0.9,
+        });
+
+        if (result.canceled || !result.assets || result.assets.length === 0) return;
+
+        const newImages = result.assets.map((a) => ({
+          uri: a.uri,
+          width: a.width,
+          height: a.height,
+        }));
+
+        triggerHaptic('selection');
+        setSelectedOcrImages((prev) => {
+          const combined = [...prev, ...newImages];
+          return combined.slice(0, 10);
+        });
       }
+    } catch (err: any) {
+      triggerHaptic('errorNotification');
+      showThemedAlert('Image Selection Error', err.message || 'Could not select photo.');
+    }
+  };
 
-      const pickerOptions: ImagePicker.ImagePickerOptions = {
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        quality: 0.9,
-      };
+  const handleRemoveOcrImage = (indexToRemove: number) => {
+    triggerHaptic('lightImpact');
+    setSelectedOcrImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+  };
 
-      const result = useCamera
-        ? await ImagePicker.launchCameraAsync(pickerOptions)
-        : await ImagePicker.launchImageLibraryAsync(pickerOptions);
+  // Start Multi-Page OCR Processing
+  const handleStartMultiPageOcr = async () => {
+    if (selectedOcrImages.length === 0) {
+      showThemedAlert('No Photos Selected', 'Please take or choose at least 1 photo of your notes.');
+      return;
+    }
 
-      if (result.canceled || !result.assets || result.assets.length === 0) return;
-
-      const asset = result.assets[0];
-
+    try {
       setIsScanningOcr(true);
+      triggerHaptic('mediumImpact');
 
-      // Pre-process image: Resize longest edge to ~1800px, compress to 0.8 JPEG, normalize EXIF orientation
-      const origWidth = asset.width || 1800;
-      const origHeight = asset.height || 1800;
-      const longestEdge = Math.max(origWidth, origHeight);
-      const scale = longestEdge > 1800 ? 1800 / longestEdge : 1;
-      const targetWidth = Math.round(origWidth * scale);
-      const targetHeight = Math.round(origHeight * scale);
+      const extractedPages: { pageNum: number; text: string }[] = [];
 
-      const manipResult = await ImageManipulator.manipulateAsync(
-        asset.uri,
-        [{ resize: { width: targetWidth, height: targetHeight } }],
-        { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-      );
+      for (let i = 0; i < selectedOcrImages.length; i++) {
+        const asset = selectedOcrImages[i];
+        setOcrCurrentPageIndex(i + 1);
 
-      const base64Data = manipResult.base64;
-      if (!base64Data) {
-        throw new Error('Could not process photo image data.');
+        // Pre-process image: Resize longest edge to ~1800px, compress to 0.8 JPEG
+        const origWidth = asset.width || 1800;
+        const origHeight = asset.height || 1800;
+        const longestEdge = Math.max(origWidth, origHeight);
+        const scale = longestEdge > 1800 ? 1800 / longestEdge : 1;
+        const targetWidth = Math.round(origWidth * scale);
+        const targetHeight = Math.round(origHeight * scale);
+
+        const manipResult = await ImageManipulator.manipulateAsync(
+          asset.uri,
+          [{ resize: { width: targetWidth, height: targetHeight } }],
+          { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        );
+
+        const base64Data = manipResult.base64;
+        if (!base64Data) continue;
+
+        try {
+          const extracted = await extractOcrText(base64Data);
+          const cleanText = (extracted.text || '').trim();
+          if (cleanText) {
+            extractedPages.push({ pageNum: i + 1, text: cleanText });
+          }
+        } catch (pageErr) {
+          console.warn(`[OCR Page ${i + 1} Warning]:`, pageErr);
+        }
       }
-
-      // Call OCR endpoint
-      const extracted = await extractOcrText(base64Data);
-      const cleanText = (extracted.text || '').trim();
 
       setIsScanningOcr(false);
 
-      if (!cleanText || cleanText.length < 10) {
+      if (extractedPages.length === 0) {
         triggerHaptic('errorNotification');
         showThemedAlert(
           'No Readable Text Found',
-          'No readable text could be recognized in this photo. Please retake with better lighting and focus.'
+          'No readable text could be recognized across the selected photos. Please retake with better lighting and focus.'
         );
         return;
       }
 
-      // Transition to Text Review/Edit screen
+      // Combine text in order
+      let combinedText = '';
+      if (extractedPages.length === 1) {
+        combinedText = extractedPages[0].text;
+      } else {
+        combinedText = extractedPages
+          .map((p) => `--- Page ${p.pageNum} ---\n${p.text}`)
+          .join('\n\n');
+      }
+
       triggerHaptic('mediumImpact');
-      setOcrTitle(extracted.title || 'Handwritten Study Notes');
-      setOcrText(cleanText);
+      const generatedTitle =
+        selectedOcrImages.length > 1
+          ? `Handwritten Study Notes (${selectedOcrImages.length} Pages)`
+          : 'Handwritten Study Notes';
+
+      setOcrTitle(generatedTitle);
+      setOcrText(combinedText);
       setIsReviewingOcr(true);
     } catch (err: any) {
       setIsScanningOcr(false);
       triggerHaptic('errorNotification');
-      showThemedAlert('Note Scanner Error', err.message || 'Could not read text from this image. Please try a clearer, well-lit photo.');
+      showThemedAlert(
+        'Note Scanner Error',
+        err.message || 'Could not read text from photos. Please try clearer, well-lit photos.'
+      );
     }
   };
 
@@ -857,35 +938,123 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
                 {/* 4. Notes OCR Tab */}
                 {activeTab === 'ocr' && (
                   <View style={styles.tabContentSection}>
-                    <View style={[styles.actionIconCircle, { backgroundColor: colors.skyContainer }]}>
-                      <Ionicons name="camera" size={30} color={colors.sky} />
-                    </View>
-                    <Text style={[styles.contentCardTitle, { color: colors.textPrimary }]}>
-                      Handwritten Notes Scanner
-                    </Text>
-                    <Text style={[styles.contentCardDesc, { color: colors.textSecondary }]}>
-                      Capture photos of your handwritten notebook pages, whiteboards, or handouts.
-                    </Text>
+                    {selectedOcrImages.length === 0 ? (
+                      <>
+                        <View style={[styles.actionIconCircle, { backgroundColor: colors.skyContainer }]}>
+                          <Ionicons name="camera" size={30} color={colors.sky} />
+                        </View>
+                        <Text style={[styles.contentCardTitle, { color: colors.textPrimary }]}>
+                          Handwritten Notes Scanner
+                        </Text>
+                        <Text style={[styles.contentCardDesc, { color: colors.textSecondary }]}>
+                          Capture photos of your handwritten notebook pages, whiteboards, or handouts (up to 10 pages).
+                        </Text>
 
-                    <View style={styles.ocrBtnRow}>
-                      <TouchableOpacity
-                        style={[styles.ocrActionBtn, { backgroundColor: colors.sky }]}
-                        onPress={() => handlePickPhoto(true)}
-                        disabled={isIngesting || isScanningOcr}
-                      >
-                        <Ionicons name="camera-outline" size={18} color={colors.onSky} />
-                        <Text style={[styles.primaryActionText, { color: colors.onSky }]}>Take Photo</Text>
-                      </TouchableOpacity>
+                        <View style={styles.ocrBtnRow}>
+                          <TouchableOpacity
+                            style={[styles.ocrActionBtn, { backgroundColor: colors.sky }]}
+                            onPress={() => handlePickOcrPhotos(true)}
+                            disabled={isIngesting || isScanningOcr}
+                          >
+                            <Ionicons name="camera-outline" size={18} color={colors.onSky} />
+                            <Text style={[styles.primaryActionText, { color: colors.onSky }]}>Take Photo</Text>
+                          </TouchableOpacity>
 
-                      <TouchableOpacity
-                        style={[styles.ocrActionBtn, { backgroundColor: colors.surfaceSubtle }]}
-                        onPress={() => handlePickPhoto(false)}
-                        disabled={isIngesting || isScanningOcr}
-                      >
-                        <Ionicons name="images-outline" size={18} color={colors.textPrimary} />
-                        <Text style={[styles.primaryActionText, { color: colors.textPrimary }]}>From Gallery</Text>
-                      </TouchableOpacity>
-                    </View>
+                          <TouchableOpacity
+                            style={[styles.ocrActionBtn, { backgroundColor: colors.surfaceSubtle }]}
+                            onPress={() => handlePickOcrPhotos(false)}
+                            disabled={isIngesting || isScanningOcr}
+                          >
+                            <Ionicons name="images-outline" size={18} color={colors.textPrimary} />
+                            <Text style={[styles.primaryActionText, { color: colors.textPrimary }]}>From Gallery</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </>
+                    ) : (
+                      <View style={styles.multiOcrContainer}>
+                        {/* Status Header */}
+                        <View style={styles.multiOcrHeader}>
+                          <View style={styles.multiOcrBadgeRow}>
+                            <Badge
+                              label={`${selectedOcrImages.length} / 10 pages selected`}
+                              variant="sky"
+                            />
+                            {selectedOcrImages.length >= 10 && (
+                              <Text style={[styles.maxPagesLabel, { color: colors.peach }]}>
+                                (Max reached)
+                              </Text>
+                            )}
+                          </View>
+                          <TouchableOpacity
+                            onPress={() => {
+                              triggerHaptic('lightImpact');
+                              setSelectedOcrImages([]);
+                            }}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Text style={[styles.clearAllBtnText, { color: colors.textTertiary }]}>
+                              Clear all
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        {/* Thumbnails Horizontal Scroll Tray */}
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          contentContainerStyle={styles.thumbnailsScroll}
+                        >
+                          {selectedOcrImages.map((img, idx) => (
+                            <View key={`thumb_${idx}`} style={styles.thumbnailWrapper}>
+                              <Image source={{ uri: img.uri }} style={styles.thumbnailImg} resizeMode="cover" />
+                              <View style={styles.thumbnailPageBadge}>
+                                <Text style={styles.thumbnailPageText}>P. {idx + 1}</Text>
+                              </View>
+                              <TouchableOpacity
+                                style={styles.thumbnailDeleteBtn}
+                                onPress={() => handleRemoveOcrImage(idx)}
+                                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                              >
+                                <Ionicons name="close" size={12} color="#FFFFFF" />
+                              </TouchableOpacity>
+                            </View>
+                          ))}
+
+                          {selectedOcrImages.length < 10 && (
+                            <View style={styles.addMoreTilesRow}>
+                              <TouchableOpacity
+                                style={[styles.addMoreTile, { borderColor: colors.borderSubtle }]}
+                                onPress={() => handlePickOcrPhotos(true)}
+                              >
+                                <Ionicons name="camera" size={16} color={colors.sky} />
+                                <Text style={[styles.addMoreTileText, { color: colors.sky }]}>+ Photo</Text>
+                              </TouchableOpacity>
+
+                              <TouchableOpacity
+                                style={[styles.addMoreTile, { borderColor: colors.borderSubtle }]}
+                                onPress={() => handlePickOcrPhotos(false)}
+                              >
+                                <Ionicons name="images" size={16} color={colors.primary} />
+                                <Text style={[styles.addMoreTileText, { color: colors.primary }]}>+ Gallery</Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
+                        </ScrollView>
+
+                        {/* Start OCR Button */}
+                        <TouchableOpacity
+                          style={[styles.primaryActionBtn, { backgroundColor: colors.sky, marginTop: spacing.md }]}
+                          onPress={handleStartMultiPageOcr}
+                          disabled={isScanningOcr}
+                          activeOpacity={0.85}
+                        >
+                          <Ionicons name="scan-outline" size={18} color={colors.onSky} />
+                          <Text style={[styles.primaryActionText, { color: colors.onSky }]}>
+                            {`Scan ${selectedOcrImages.length} Page${selectedOcrImages.length > 1 ? 's' : ''} with AI`}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
                 )}
               </View>
@@ -897,12 +1066,18 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
             <View style={[styles.loadingOverlay, { backgroundColor: colors.surfaceElevated }]}>
               <ThemedLoader
                 title="Scanning Handwritten Notes"
-                stage="Recognizing handwriting & equations..."
+                stage={
+                  selectedOcrImages.length > 1
+                    ? `Processing page ${ocrCurrentPageIndex || 1} of ${selectedOcrImages.length}...`
+                    : 'Recognizing handwriting & equations...'
+                }
                 stages={[
-                  'Optimizing image resolution & orientation...',
-                  'Recognizing handwriting & equations...',
-                  'Validating character accuracy...',
-                  'Preparing editable review screen...',
+                  'Optimizing page resolution & contrast...',
+                  selectedOcrImages.length > 1
+                    ? `Extracting page ${ocrCurrentPageIndex || 1} of ${selectedOcrImages.length}...`
+                    : 'Transcribing handwriting & equations...',
+                  'Validating character & math accuracy...',
+                  'Compiling multi-page study entry...',
                 ]}
                 subtext="Please keep the app open while we read your notes."
                 icon="scan-outline"
@@ -1148,6 +1323,92 @@ const styles = StyleSheet.create({
     gap: spacing.xs + 2,
     height: 48,
     borderRadius: borderRadius.full,
+  },
+  multiOcrContainer: {
+    width: '100%',
+  },
+  multiOcrHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    width: '100%',
+  },
+  multiOcrBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  maxPagesLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  clearAllBtnText: {
+    ...typography.presets.labelMedium,
+    fontSize: 12,
+  },
+  thumbnailsScroll: {
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: 2,
+  },
+  thumbnailWrapper: {
+    width: 72,
+    height: 98,
+    borderRadius: borderRadius.md,
+    position: 'relative',
+    overflow: 'visible',
+  },
+  thumbnailImg: {
+    width: '100%',
+    height: '100%',
+    borderRadius: borderRadius.md,
+  },
+  thumbnailPageBadge: {
+    position: 'absolute',
+    bottom: 4,
+    left: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.68)',
+    borderRadius: 4,
+    paddingVertical: 2,
+    alignItems: 'center',
+  },
+  thumbnailPageText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  thumbnailDeleteBtn: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#D96B43',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+    ...shadows.subtle,
+  },
+  addMoreTilesRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  addMoreTile: {
+    width: 72,
+    height: 98,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  addMoreTileText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFill,

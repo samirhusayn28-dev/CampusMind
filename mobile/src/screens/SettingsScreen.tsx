@@ -22,7 +22,7 @@ import {
 import { useContentStore } from '../store/useContentStore';
 import { useHabitStore } from '../store/useHabitStore';
 import { triggerHaptic } from '../services/haptics';
-import { rescheduleAllReminders, scheduleTestReminder } from '../services/notifications';
+import { rescheduleAllReminders } from '../services/notifications';
 import { Header } from '../components/Header';
 import { Card } from '../components/Card';
 import { Badge } from '../components/Badge';
@@ -396,27 +396,6 @@ export const SettingsScreen: React.FC = () => {
                   thumbColor={colors.surface}
                 />
               </View>
-
-              <View style={[styles.divider, { backgroundColor: colors.borderSubtle }]} />
-
-              <TouchableOpacity
-                style={[styles.testReminderBtn, { backgroundColor: colors.surfaceSubtle }]}
-                onPress={async () => {
-                  triggerHaptic('lightImpact');
-                  const testId = await scheduleTestReminder(5);
-                  if (testId) {
-                    showThemedToast('success', 'Test reminder scheduled! It will arrive in 5 seconds.');
-                  } else {
-                    showThemedAlert('Permission Required', 'Please enable notification permissions in your device settings.');
-                  }
-                }}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="notifications-outline" size={16} color={colors.primary} />
-                <Text style={[styles.testReminderText, { color: colors.primary }]}>
-                  Send Test Notification (5s)
-                </Text>
-              </TouchableOpacity>
             </>
           )}
         </Card>
@@ -851,18 +830,5 @@ const styles = StyleSheet.create({
     ...typography.presets.titleMedium,
     fontWeight: '700',
     letterSpacing: 0.3,
-  },
-  testReminderBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs + 2,
-    paddingVertical: spacing.sm + 2,
-    borderRadius: borderRadius.md,
-    marginTop: spacing.xs,
-  },
-  testReminderText: {
-    ...typography.presets.labelMedium,
-    fontWeight: '700',
   },
 });

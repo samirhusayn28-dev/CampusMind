@@ -19,6 +19,7 @@ import { useContentStore } from '../store/useContentStore';
 import { useChatStore } from '../store/useChatStore';
 import { Header } from '../components/Header';
 import { Badge } from '../components/Badge';
+import { RichMarkdown } from '../components/RichMarkdown';
 import { spacing, borderRadius } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { ChatLanguage, ChatMessage } from '../types/chat';
@@ -259,17 +260,25 @@ export const StudyChatScreen: React.FC = () => {
                           ],
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.messageText,
-                        {
-                          color: isUser ? colors.onPrimary : colors.textPrimary,
-                          textAlign: msg.language === 'urdu' ? 'right' : 'left',
-                        },
-                      ]}
-                    >
-                      {msg.text}
-                    </Text>
+                    {isUser ? (
+                      <Text
+                        style={[
+                          styles.messageText,
+                          {
+                            color: colors.onPrimary,
+                            textAlign: msg.language === 'urdu' ? 'right' : 'left',
+                          },
+                        ]}
+                      >
+                        {msg.text}
+                      </Text>
+                    ) : (
+                      <RichMarkdown
+                        content={msg.text}
+                        isUser={false}
+                        language={msg.language}
+                      />
+                    )}
 
                     <Text
                       style={[

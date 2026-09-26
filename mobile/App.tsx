@@ -6,6 +6,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import * as SplashScreen from 'expo-splash-screen';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ThemedNotificationHost } from './src/components/ThemedNotificationHost';
+import { InAppUpdateModal } from './src/components/InAppUpdateModal';
 import { ThemedLoader } from './src/components/ThemedLoader';
 import { useThemeStore } from './src/store/useThemeStore';
 import { useAuthStore } from './src/store/useAuthStore';
@@ -53,6 +54,7 @@ export default function App() {
           <StatusBar style={isDark ? 'light' : 'dark'} />
           <RootNavigator />
           <ThemedNotificationHost />
+          <InAppUpdateModal />
 
         {!splashAnimationDone && (
           <Animated.View
