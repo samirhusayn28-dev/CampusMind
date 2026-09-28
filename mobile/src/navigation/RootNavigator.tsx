@@ -14,6 +14,8 @@ import { ConceptMapScreen } from '../screens/ConceptMapScreen';
 import { ThemedLoader } from '../components/ThemedLoader';
 import { useThemeStore } from '../store/useThemeStore';
 import { useAuthStore } from '../store/useAuthStore';
+import { useNetworkStore } from '../store/useNetworkStore';
+import { NoInternetScreen } from '../components/NoInternetScreen';
 import { typography } from '../theme/typography';
 import { borderRadius, spacing } from '../theme/spacing';
 
@@ -22,10 +24,14 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export const RootNavigator: React.FC = () => {
   const { colors, isDark } = useThemeStore();
   const { user, isAuthenticated, hasCompletedOnboarding, isLoading, initializeAuth } = useAuthStore();
+  const { isOffline, initNetworkListener, checkConnection } = useNetworkStore();
 
   useEffect(() => {
+    const unsubscribeNetwork = initNetworkListener();
+    checkConnection();
     initializeAuth();
-  }, [initializeAuth]);
+    return unsubscribeNetwork;
+  }, [initNetworkListener, checkConnection, initializeAuth]);
 
   const navigationTheme = {
     ...(isDark ? DarkTheme : DefaultTheme),
@@ -38,6 +44,11 @@ export const RootNavigator: React.FC = () => {
       primary: colors.primary,
     },
   };
+
+  // If the device is offline, always show the dedicated No Internet screen
+  if (isOffline) {
+    return <NoInternetScreen onRetry={async () => { await initializeAuth(); }} />;
+  }
 
   if (isLoading) {
     return (
