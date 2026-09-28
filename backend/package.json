@@ -9,6 +9,7 @@
   "dependencies": {
     "@google-cloud/vision": "^6.1.0",
     "@pinecone-database/pinecone": "^9.0.0",
+    "@supabase/supabase-js": "^2.117.2",
     "@vercel/node": "^5.1.8",
     "dotenv": "^16.4.7",
     "groq-sdk": "^1.6.0",

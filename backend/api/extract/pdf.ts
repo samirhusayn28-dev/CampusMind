@@ -1,4 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { verifyAuth } from '../_utils/auth.js';
+import { getSupabaseAdmin } from '../_utils/supabase.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
@@ -9,17 +11,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // 1. Verify Firebase authentication token
+  const authUser = await verifyAuth(req);
+  if (!authUser) {
+    return res.status(401).json({ error: 'Unauthorized. Please sign in to extract PDF text.' });
+  }
+
   let parser: any = null;
   try {
-    const { fileBase64, fileName } = req.body || {};
+    const { storagePath, fileName } = req.body || {};
 
-    if (!fileBase64) {
-      return res.status(400).json({ error: 'Missing required fileBase64 in request body' });
+    if (!storagePath || typeof storagePath !== 'string') {
+      return res.status(400).json({ error: 'Missing required storagePath in request body' });
     }
 
-    // Convert base64 data to buffer (stripping data:application/pdf;base64, header if present)
-    const base64Clean = fileBase64.replace(/^data:application\/pdf;base64,/, '');
-    const buffer = Buffer.from(base64Clean, 'base64');
+    // 2. Prevent path traversal attacks
+    if (storagePath.includes('..') || storagePath.includes('\\')) {
+      return res.status(400).json({ error: 'Invalid storagePath' });
+    }
+
+    // 3. Ensure storagePath strictly belongs to the authenticated user
+    const expectedPrefix = `pdfs/${authUser.uid}/`;
+    if (!storagePath.startsWith(expectedPrefix)) {
+      return res.status(403).json({
+        error: 'Access denied: PDF does not belong to the authenticated user.',
+      });
+    }
+
+    // 4. Download PDF from Supabase Storage into buffer
+    const relativePath = storagePath.slice('pdfs/'.length);
+    const supabase = getSupabaseAdmin();
+    const { data: fileBlob, error: downloadError } = await supabase.storage
+      .from('pdfs')
+      .download(relativePath);
+
+    if (downloadError || !fileBlob) {
+      console.error('[Supabase Storage Download Error]:', downloadError);
+      return res.status(404).json({
+        error: 'Failed to retrieve PDF file from storage.',
+        details: downloadError?.message,
+      });
+    }
+
+    const arrayBuffer = await fileBlob.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
     let cleanText = '';
     let numPages = 1;

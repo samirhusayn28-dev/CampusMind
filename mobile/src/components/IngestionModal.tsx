@@ -34,7 +34,8 @@ import { Badge } from './Badge';
 import { ThemedLoader } from './ThemedLoader';
 import { showThemedAlert, showThemedToast } from '../store/useNotificationStore';
 import { triggerHaptic } from '../services/haptics';
-import { extractOcrText } from '../services/api';
+import { extractOcrText, getSignedPdfUploadUrl } from '../services/api';
+import { AnimatedPressable } from '../theme/animations';
 import { spacing, borderRadius, shadows } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
@@ -66,6 +67,7 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
 
   const [activeTab, setActiveTab] = useState<ContentType>(initialType);
   const [selectedSubject, setSelectedSubject] = useState('Computer Science');
+  const [pdfUploadProgress, setPdfUploadProgress] = useState<number | null>(null);
 
   // Custom Subject State & Deduplicated Dynamic List
   const [isAddingCustomSubject, setIsAddingCustomSubject] = useState(false);
@@ -296,7 +298,9 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
     setIsReviewingOcr(false);
   };
 
-  // Handle PDF Picking
+  const MAX_PDF_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
+
+  // Handle PDF Picking with Direct Supabase Storage Upload via Signed URL
   const handlePickPdf = async () => {
     try {
       triggerHaptic('lightImpact');
@@ -308,16 +312,89 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
       if (res.canceled || !res.assets || res.assets.length === 0) return;
 
       const file = res.assets[0];
-      const base64 = await FileSystem.readAsStringAsync(file.uri, {
-        encoding: FileSystem.EncodingType.Base64,
+
+      // Client-side 20MB check
+      if (file.size && file.size > MAX_PDF_SIZE_BYTES) {
+        triggerHaptic('errorNotification');
+        const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+        showThemedAlert(
+          'File Too Large',
+          `"${file.name}" is ${sizeMb}MB, which exceeds the 20MB limit. Please choose a smaller PDF or split the document.`
+        );
+        return;
+      }
+
+      setPdfUploadProgress(0);
+
+      // 1. Request signed upload URL from backend
+      const { signedUrl, storagePath } = await getSignedPdfUploadUrl(file.name);
+
+      // 2. Convert local file to Blob
+      let blob: Blob;
+      try {
+        const response = await fetch(file.uri);
+        blob = await response.blob();
+      } catch {
+        // Fallback: read as base64 and create Blob
+        const base64Data = await FileSystem.readAsStringAsync(file.uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        blob = new Blob([byteArray], { type: 'application/pdf' });
+      }
+
+      // 3. Direct upload to Supabase signed URL using XMLHttpRequest with live progress tracking
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('PUT', signedUrl);
+        xhr.setRequestHeader('Content-Type', 'application/pdf');
+
+        if (xhr.upload) {
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable && event.total > 0) {
+              const progress = Math.round(
+                (event.loaded / event.total) * 100
+              );
+              setPdfUploadProgress(progress);
+            }
+          };
+        }
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            reject(new Error(`Storage upload failed with status ${xhr.status}`));
+          }
+        };
+
+        xhr.onerror = () => {
+          reject(new Error('Network error during file upload. Please check your connection.'));
+        };
+
+        xhr.ontimeout = () => {
+          reject(new Error('Upload timed out. Please try again.'));
+        };
+        xhr.timeout = 120000;
+
+        xhr.send(blob);
       });
 
+      // 4. Send storagePath to backend for extraction
       const userId = user?.uid || 'guest_user';
-      await ingestPdf(base64, file.name, userId, selectedSubject);
+      await ingestPdf(storagePath, file.name, userId, selectedSubject);
+
+      setPdfUploadProgress(null);
       triggerHaptic('successNotification');
       onClose();
       showThemedToast('success', `"${file.name}" processed and saved!`);
     } catch (err: any) {
+      setPdfUploadProgress(null);
       triggerHaptic('errorNotification');
       showThemedAlert('PDF Upload Error', err.message || 'Could not process PDF document.');
     }
@@ -827,17 +904,41 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
                       Upload lecture slide decks, syllabus sheets, or textbook chapters.
                     </Text>
 
-                    <TouchableOpacity
-                      style={[styles.primaryActionBtn, { backgroundColor: colors.primary }]}
-                      onPress={handlePickPdf}
-                      disabled={isIngesting}
-                      activeOpacity={0.85}
-                    >
-                      <Ionicons name="folder-open-outline" size={18} color={colors.onPrimary} />
-                      <Text style={[styles.primaryActionText, { color: colors.onPrimary }]}>
-                        Choose PDF from Files
-                      </Text>
-                    </TouchableOpacity>
+                    {pdfUploadProgress !== null ? (
+                      <View style={styles.pdfProgressBox}>
+                        <View style={styles.pdfProgressHeader}>
+                          <Text style={[styles.pdfProgressLabel, { color: colors.textSecondary }]}>
+                            Uploading to Storage...
+                          </Text>
+                          <Text style={[styles.pdfProgressPercent, { color: colors.primary }]}>
+                            {pdfUploadProgress}%
+                          </Text>
+                        </View>
+                        <View style={[styles.progressBarTrack, { backgroundColor: colors.surfaceSubtle }]}>
+                          <View
+                            style={[
+                              styles.progressBarFill,
+                              {
+                                backgroundColor: colors.primary,
+                                width: `${Math.min(100, Math.max(0, pdfUploadProgress))}%`,
+                              },
+                            ]}
+                          />
+                        </View>
+                      </View>
+                    ) : (
+                      <AnimatedPressable
+                        style={[styles.primaryActionBtn, { backgroundColor: colors.primary }]}
+                        onPress={handlePickPdf}
+                        disabled={isIngesting}
+                        scaleTarget={0.97}
+                      >
+                        <Ionicons name="folder-open-outline" size={18} color={colors.onPrimary} />
+                        <Text style={[styles.primaryActionText, { color: colors.onPrimary }]}>
+                          Choose PDF from Files
+                        </Text>
+                      </AnimatedPressable>
+                    )}
                   </View>
                 )}
 
@@ -871,17 +972,17 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
                       ]}
                     />
 
-                    <TouchableOpacity
+                    <AnimatedPressable
                       style={[styles.primaryActionBtn, { backgroundColor: colors.peach }]}
                       onPress={handleIngestYouTube}
                       disabled={isIngesting || !youtubeUrl.trim()}
-                      activeOpacity={0.85}
+                      scaleTarget={0.97}
                     >
                       <Ionicons name="cloud-download-outline" size={18} color={colors.onPeach} />
                       <Text style={[styles.primaryActionText, { color: colors.onPeach }]}>
                         Extract Transcript
                       </Text>
-                    </TouchableOpacity>
+                    </AnimatedPressable>
                   </View>
                 )}
 
@@ -909,27 +1010,29 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
 
                     <View style={styles.audioBtnRow}>
                       {!isRecording ? (
-                        <TouchableOpacity
+                        <AnimatedPressable
                           style={[styles.primaryActionBtn, { backgroundColor: colors.lavender, flex: 1 }]}
                           onPress={startRecording}
                           disabled={isIngesting}
+                          scaleTarget={0.97}
                         >
                           <Ionicons name="radio-button-on" size={18} color={colors.onLavender} />
                           <Text style={[styles.primaryActionText, { color: colors.onLavender }]}>
                             Start Recording
                           </Text>
-                        </TouchableOpacity>
+                        </AnimatedPressable>
                       ) : (
-                        <TouchableOpacity
+                        <AnimatedPressable
                           style={[styles.primaryActionBtn, { backgroundColor: colors.peach, flex: 1 }]}
                           onPress={stopAndUploadRecording}
                           disabled={isIngesting}
+                          scaleTarget={0.97}
                         >
                           <Ionicons name="stop-circle-outline" size={18} color={colors.onPeach} />
                           <Text style={[styles.primaryActionText, { color: colors.onPeach }]}>
                             Finish & Transcribe
                           </Text>
-                        </TouchableOpacity>
+                        </AnimatedPressable>
                       )}
                     </View>
                   </View>
@@ -951,23 +1054,25 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
                         </Text>
 
                         <View style={styles.ocrBtnRow}>
-                          <TouchableOpacity
+                          <AnimatedPressable
                             style={[styles.ocrActionBtn, { backgroundColor: colors.sky }]}
                             onPress={() => handlePickOcrPhotos(true)}
                             disabled={isIngesting || isScanningOcr}
+                            scaleTarget={0.96}
                           >
                             <Ionicons name="camera-outline" size={18} color={colors.onSky} />
                             <Text style={[styles.primaryActionText, { color: colors.onSky }]}>Take Photo</Text>
-                          </TouchableOpacity>
+                          </AnimatedPressable>
 
-                          <TouchableOpacity
+                          <AnimatedPressable
                             style={[styles.ocrActionBtn, { backgroundColor: colors.surfaceSubtle }]}
                             onPress={() => handlePickOcrPhotos(false)}
                             disabled={isIngesting || isScanningOcr}
+                            scaleTarget={0.96}
                           >
                             <Ionicons name="images-outline" size={18} color={colors.textPrimary} />
                             <Text style={[styles.primaryActionText, { color: colors.textPrimary }]}>From Gallery</Text>
-                          </TouchableOpacity>
+                          </AnimatedPressable>
                         </View>
                       </>
                     ) : (
@@ -1470,5 +1575,34 @@ const styles = StyleSheet.create({
   secondaryActionText: {
     ...typography.presets.labelMedium,
     fontWeight: '600',
+  },
+  pdfProgressBox: {
+    width: '100%',
+    paddingVertical: spacing.sm,
+  },
+  pdfProgressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  pdfProgressLabel: {
+    ...typography.presets.bodySmall,
+    fontSize: 13,
+  },
+  pdfProgressPercent: {
+    ...typography.presets.labelMedium,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  progressBarTrack: {
+    width: '100%',
+    height: 8,
+    borderRadius: borderRadius.full,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: borderRadius.full,
   },
 });

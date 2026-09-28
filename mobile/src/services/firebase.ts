@@ -331,14 +331,22 @@ export async function signInAsGuest(name: string = 'Campus Student'): Promise<Us
 export async function syncUserProfileToFirestore(user: User): Promise<UserProfile> {
   const userRef = doc(db, 'users', user.uid);
   let existingProfile: Partial<UserProfile> = {};
+  let fetchError: any = null;
 
   try {
     const docSnap = await getDoc(userRef);
     if (docSnap.exists()) {
       existingProfile = docSnap.data() as Partial<UserProfile>;
     }
-  } catch (err) {
-    console.warn('[Firestore] Could not fetch existing profile, creating fresh one:', err);
+  } catch (err: any) {
+    fetchError = err;
+    console.warn('[Firestore] Could not fetch existing profile from server:', err);
+  }
+
+  // If fetch failed due to network / connectivity issues, do NOT create a false "not onboarded" profile!
+  // Throw so useAuthStore knows this is a network failure, not a brand-new user needing setup.
+  if (fetchError) {
+    throw fetchError;
   }
 
   const isOnboarded = Boolean(existingProfile.isOnboarded || existingProfile.username);
@@ -378,6 +386,7 @@ export async function syncUserProfileToFirestore(user: User): Promise<UserProfil
       },
       { merge: true }
     );
+    AsyncStorage.setItem(`@campusmind_user_profile_${user.uid}`, JSON.stringify(profileData)).catch(() => {});
   } catch (err) {
     console.warn('[Firestore] Error saving user profile:', err);
   }

@@ -24,6 +24,7 @@ interface ContentStoreState {
   isIngesting: boolean;
   ingestionStage: string;
   ingestionType: ContentType | null;
+  uploadProgress: number;
   isSummarizing: boolean;
   isTranslating: boolean;
   isGeneratingQuiz: boolean;
@@ -32,7 +33,13 @@ interface ContentStoreState {
 
   // Actions
   loadMaterials: (userId: string) => Promise<void>;
-  ingestPdf: (fileBase64: string, fileName: string, userId: string, subject?: string) => Promise<StudyMaterial>;
+  setUploadProgress: (progress: number) => void;
+  ingestPdf: (
+    storagePath: string,
+    fileName: string,
+    userId: string,
+    subject?: string
+  ) => Promise<StudyMaterial>;
   ingestYouTube: (url: string, userId: string, subject?: string) => Promise<StudyMaterial>;
   ingestAudio: (audioBase64: string, durationSeconds: number, userId: string, subject?: string) => Promise<StudyMaterial>;
   ingestOcr: (imageBase64: string, userId: string, subject?: string) => Promise<StudyMaterial>;
@@ -79,6 +86,7 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
   isIngesting: false,
   ingestionStage: '',
   ingestionType: null,
+  uploadProgress: 0,
   isSummarizing: false,
   isTranslating: false,
   isGeneratingQuiz: false,
@@ -97,17 +105,23 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
     }
   },
 
-  ingestPdf: async (fileBase64: string, fileName: string, userId: string, subject: string = 'General Studies') => {
+  setUploadProgress: (progress: number) => set({ uploadProgress: progress }),
+
+  ingestPdf: async (
+    storagePath: string,
+    fileName: string,
+    userId: string,
+    subject: string = 'General Studies'
+  ) => {
     set({
       isIngesting: true,
-      ingestionStage: 'Uploading document...',
+      ingestionStage: 'Extracting document text...',
       ingestionType: 'pdf',
       error: null,
     });
 
     try {
-      set({ ingestionStage: 'Extracting document text...' });
-      const result = await extractPdfText(fileBase64, fileName);
+      const result = await extractPdfText(storagePath, fileName);
 
       if (!result.text || result.text.trim().length < 20) {
         throw new Error(`Could not extract readable text from "${fileName}". Minimum 20 characters required.`);
@@ -137,6 +151,7 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
         isIngesting: false,
         ingestionStage: '',
         ingestionType: null,
+        uploadProgress: 0,
       });
 
       return newMaterial;
@@ -145,7 +160,8 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
         isIngesting: false,
         ingestionStage: '',
         ingestionType: null,
-        error: err.message || 'PDF ingestion failed',
+        uploadProgress: 0,
+        error: err.message || 'Failed to ingest PDF',
       });
       throw err;
     }

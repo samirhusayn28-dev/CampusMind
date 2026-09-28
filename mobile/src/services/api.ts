@@ -228,14 +228,40 @@ export interface ExtractionResult {
   detectedLanguages?: string[];
 }
 
+// 0. PDF Signed Upload URL via Supabase Storage
+export async function getSignedPdfUploadUrl(fileName: string): Promise<{
+  signedUrl: string;
+  storagePath: string;
+  relativePath?: string;
+  token?: string;
+}> {
+  return await requestBackend<{
+    signedUrl: string;
+    storagePath: string;
+    relativePath?: string;
+    token?: string;
+  }>(
+    '/api/upload/pdf-url',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName }),
+    },
+    'prepare PDF upload'
+  );
+}
+
 // 1. PDF Extraction via backend
-export async function extractPdfText(fileBase64: string, fileName: string): Promise<ExtractionResult> {
+export async function extractPdfText(
+  storagePath: string,
+  fileName: string
+): Promise<ExtractionResult> {
   const data = await requestBackend<any>(
     '/api/extract/pdf',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileBase64, fileName }),
+      body: JSON.stringify({ storagePath, fileName }),
     },
     'extract PDF text'
   );
