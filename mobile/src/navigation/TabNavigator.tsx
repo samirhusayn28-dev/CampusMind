@@ -13,6 +13,53 @@ import { triggerHaptic } from '../services/haptics';
 import { borderRadius, spacing, shadows } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
+import { AnimatedPressable, IOS_EASING } from '../theme/animations';
+import { Animated } from 'react-native';
+
+const TabIconView: React.FC<{
+  focused: boolean;
+  iconName: keyof typeof Ionicons.glyphMap;
+  color: string;
+  activeColor: string;
+  indicatorColor: string;
+}> = ({ focused, iconName, color, activeColor, indicatorColor }) => {
+  const scale = React.useRef(new Animated.Value(focused ? 1 : 0.95)).current;
+  const opacity = React.useRef(new Animated.Value(focused ? 1 : 0.75)).current;
+
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.timing(scale, {
+        toValue: focused ? 1 : 0.95,
+        duration: 180,
+        easing: IOS_EASING,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: focused ? 1 : 0.75,
+        duration: 180,
+        easing: IOS_EASING,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [focused]);
+
+  return (
+    <Animated.View
+      style={[
+        styles.iconContainer,
+        focused && { backgroundColor: indicatorColor },
+        { transform: [{ scale }], opacity },
+      ]}
+    >
+      <Ionicons
+        name={iconName}
+        size={22}
+        color={focused ? activeColor : color}
+      />
+    </Animated.View>
+  );
+};
+
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 export const TabNavigator: React.FC = () => {
@@ -47,13 +94,14 @@ export const TabNavigator: React.FC = () => {
         tabBarItemStyle: {
           overflow: 'hidden',
         },
-        // Clean native press: removes Android dark gray rectangle ripple and triggers light haptic
+        // iOS-style subtle scale press feedback
         tabBarButton: (props) => {
           const { ref, ...rest } = props as any;
           return (
-            <TouchableOpacity
+            <AnimatedPressable
               {...rest}
-              activeOpacity={0.8}
+              scaleTarget={0.94}
+              activeOpacity={0.82}
               onPress={(e: any) => {
                 triggerHaptic('lightImpact');
                 props.onPress?.(e);
@@ -76,18 +124,13 @@ export const TabNavigator: React.FC = () => {
           }
 
           return (
-            <View
-              style={[
-                styles.iconContainer,
-                focused && { backgroundColor: colors.tabBarIndicator },
-              ]}
-            >
-              <Ionicons
-                name={iconName}
-                size={22}
-                color={focused ? colors.primary : color}
-              />
-            </View>
+            <TabIconView
+              focused={focused}
+              iconName={iconName}
+              color={color}
+              activeColor={colors.primary}
+              indicatorColor={colors.tabBarIndicator}
+            />
           );
         },
       })}

@@ -2,12 +2,15 @@ import React from 'react';
 import { View, StyleSheet, ViewStyle, StyleProp } from 'react-native';
 import { useThemeStore } from '../store/useThemeStore';
 import { borderRadius, shadows, spacing } from '../theme/spacing';
+import { AnimatedPressable } from '../theme/animations';
 
 interface CardProps {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   variant?: 'surface' | 'elevated' | 'subtle' | 'sage' | 'peach' | 'lavender' | 'sky';
   noPadding?: boolean;
+  onPress?: () => void;
+  activeOpacity?: number;
 }
 
 export const Card: React.FC<CardProps> = ({
@@ -15,6 +18,8 @@ export const Card: React.FC<CardProps> = ({
   style,
   variant = 'surface',
   noPadding = false,
+  onPress,
+  activeOpacity = 0.9,
 }) => {
   const colors = useThemeStore((state) => state.colors);
 
@@ -45,23 +50,32 @@ export const Card: React.FC<CardProps> = ({
     return colors.borderSubtle;
   };
 
-  return (
-    <View
-      style={[
-        styles.card,
-        {
-          backgroundColor: getBackgroundColor(),
-          borderColor: getBorderColor(),
-          padding: noPadding ? 0 : spacing.lg,
-        },
-        variant === 'elevated' && shadows.floating,
-        variant === 'surface' && shadows.card,
-        style,
-      ]}
-    >
-      {children}
-    </View>
-  );
+  const cardStyle = [
+    styles.card,
+    {
+      backgroundColor: getBackgroundColor(),
+      borderColor: getBorderColor(),
+      padding: noPadding ? 0 : spacing.lg,
+    },
+    variant === 'elevated' && shadows.floating,
+    variant === 'surface' && shadows.card,
+    style,
+  ];
+
+  if (onPress) {
+    return (
+      <AnimatedPressable
+        onPress={onPress}
+        scaleTarget={0.98}
+        activeOpacity={activeOpacity}
+        style={cardStyle}
+      >
+        {children}
+      </AnimatedPressable>
+    );
+  }
+
+  return <View style={cardStyle}>{children}</View>;
 };
 
 const styles = StyleSheet.create({

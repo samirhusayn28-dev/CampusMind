@@ -22,6 +22,7 @@ import { Card } from '../components/Card';
 import { Badge } from '../components/Badge';
 import { IngestionModal } from '../components/IngestionModal';
 import { isDueForReview, getReviewBadge } from '../services/spacedRepetition';
+import { StaggeredListItem } from '../theme/animations';
 import { spacing, borderRadius } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
@@ -279,51 +280,52 @@ export const LibraryScreen: React.FC = () => {
             subjectGroups.map((group, idx) => {
               const colorTheme = getSubjectColor(idx);
               return (
-                <TouchableOpacity
-                  key={group.subject}
-                  activeOpacity={0.85}
-                  onPress={() => {
-                    setSelectedSubjectFilter(group.subject);
-                    setActiveTab('all');
-                  }}
-                >
-                  <Card variant="surface" style={styles.folderCard}>
-                    <View style={styles.folderHeader}>
-                      <View style={[styles.folderIconBadge, { backgroundColor: colorTheme.bg }]}>
-                        <Ionicons name="folder" size={24} color={colorTheme.text} />
+                <StaggeredListItem key={group.subject} index={idx}>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      setSelectedSubjectFilter(group.subject);
+                      setActiveTab('all');
+                    }}
+                  >
+                    <Card variant="surface" style={styles.folderCard}>
+                      <View style={styles.folderHeader}>
+                        <View style={[styles.folderIconBadge, { backgroundColor: colorTheme.bg }]}>
+                          <Ionicons name="folder" size={24} color={colorTheme.text} />
+                        </View>
+                        <View style={styles.folderInfo}>
+                          <Text style={[styles.folderTitle, { color: colors.textPrimary }]}>
+                            {group.subject}
+                          </Text>
+                          <Text style={[styles.folderCount, { color: colors.textSecondary }]}>
+                            {group.materials.length} {group.materials.length === 1 ? 'item' : 'items'}
+                            {group.quizCount > 0 ? ` • ${group.quizCount} quizzes` : ''}
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
                       </View>
-                      <View style={styles.folderInfo}>
-                        <Text style={[styles.folderTitle, { color: colors.textPrimary }]}>
-                          {group.subject}
-                        </Text>
-                        <Text style={[styles.folderCount, { color: colors.textSecondary }]}>
-                          {group.materials.length} {group.materials.length === 1 ? 'item' : 'items'}
-                          {group.quizCount > 0 ? ` • ${group.quizCount} quizzes` : ''}
-                        </Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
-                    </View>
 
-                    {/* Folder Status Badges */}
-                    <View style={styles.folderFooter}>
-                      {group.dueCount > 0 ? (
-                        <View style={[styles.statusMiniBadge, { backgroundColor: colors.peachContainer }]}>
-                          <Ionicons name="alarm-outline" size={12} color={colors.peach} />
-                          <Text style={[styles.statusMiniText, { color: colors.peach }]}>
-                            {group.dueCount} Due for Spaced Review
-                          </Text>
-                        </View>
-                      ) : (
-                        <View style={[styles.statusMiniBadge, { backgroundColor: colors.primaryContainer }]}>
-                          <Ionicons name="checkmark-circle-outline" size={12} color={colors.primary} />
-                          <Text style={[styles.statusMiniText, { color: colors.primary }]}>
-                            All caught up
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  </Card>
-                </TouchableOpacity>
+                      {/* Folder Status Badges */}
+                      <View style={styles.folderFooter}>
+                        {group.dueCount > 0 ? (
+                          <View style={[styles.statusMiniBadge, { backgroundColor: colors.peachContainer }]}>
+                            <Ionicons name="alarm-outline" size={12} color={colors.peach} />
+                            <Text style={[styles.statusMiniText, { color: colors.peach }]}>
+                              {group.dueCount} Due for Spaced Review
+                            </Text>
+                          </View>
+                        ) : (
+                          <View style={[styles.statusMiniBadge, { backgroundColor: colors.primaryContainer }]}>
+                            <Ionicons name="checkmark-circle-outline" size={12} color={colors.primary} />
+                            <Text style={[styles.statusMiniText, { color: colors.primary }]}>
+                              All caught up
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </Card>
+                  </TouchableOpacity>
+                </StaggeredListItem>
               );
             })
           )}
@@ -351,72 +353,74 @@ export const LibraryScreen: React.FC = () => {
               </Text>
             </Card>
           ) : (
-            dueMaterials.map((item) => {
+            dueMaterials.map((item, idx) => {
               const badge = getBadgeDetails(item.type);
               const reviewBadge = getReviewBadge(item);
 
               return (
-                <Card key={item.id} variant="surface" style={styles.reviewCard}>
-                  <View style={styles.cardHeader}>
-                    <View style={styles.badgeRow}>
-                      <Badge label={reviewBadge.label} variant={reviewBadge.variant} />
-                      <Badge label={item.subject} variant="sky" />
+                <StaggeredListItem key={item.id} index={idx}>
+                  <Card variant="surface" style={styles.reviewCard}>
+                    <View style={styles.cardHeader}>
+                      <View style={styles.badgeRow}>
+                        <Badge label={reviewBadge.label} variant={reviewBadge.variant} />
+                        <Badge label={item.subject} variant="sky" />
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => handleDelete(item)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons name="trash-outline" size={16} color={colors.textTertiary} />
+                      </TouchableOpacity>
                     </View>
-                    <TouchableOpacity
-                      onPress={() => handleDelete(item)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Ionicons name="trash-outline" size={16} color={colors.textTertiary} />
-                    </TouchableOpacity>
-                  </View>
 
-                  <Text style={[styles.itemTitle, { color: colors.textPrimary }]}>
-                    {item.title}
-                  </Text>
-
-                  <Text style={[styles.itemSnippet, { color: colors.textSecondary }]} numberOfLines={2}>
-                    {item.summary?.overview || item.extractedText.substring(0, 160)}
-                  </Text>
-
-                  {/* Review Stats */}
-                  <View style={[styles.scheduleStatsBar, { backgroundColor: colors.surfaceSubtle }]}>
-                    <Text style={[styles.scheduleStatText, { color: colors.textSecondary }]}>
-                      Interval: <Text style={{ fontWeight: '700' }}>{item.reviewIntervalDays || 1}d</Text>
+                    <Text style={[styles.itemTitle, { color: colors.textPrimary }]}>
+                      {item.title}
                     </Text>
-                    <Text style={[styles.scheduleStatText, { color: colors.textSecondary }]}>
-                      Recall: <Text style={{ fontWeight: '700' }}>{item.lastReviewScore ? `${item.lastReviewScore}%` : 'New'}</Text>
-                    </Text>
-                    <Text style={[styles.scheduleStatText, { color: colors.textSecondary }]}>
-                      Level: <Text style={{ fontWeight: '700' }}>{item.repetitionNumber || 0}</Text>
-                    </Text>
-                  </View>
 
-                  {/* Actions */}
-                  <View style={styles.cardActionRow}>
-                    <TouchableOpacity
-                      style={[styles.reviewActionBtn, { backgroundColor: colors.primary }]}
-                      onPress={() => {
-                        setActiveMaterial(item);
-                        navigation.navigate('Quiz', { materialId: item.id });
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name="help-circle-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                      <Text style={styles.reviewActionBtnText}>Practice Spaced Quiz</Text>
-                    </TouchableOpacity>
+                    <Text style={[styles.itemSnippet, { color: colors.textSecondary }]} numberOfLines={2}>
+                      {item.summary?.overview || item.extractedText.substring(0, 160)}
+                    </Text>
 
-                    <TouchableOpacity
-                      style={[styles.reviewSummaryBtn, { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle }]}
-                      onPress={() => {
-                        setActiveMaterial(item);
-                        navigation.navigate('Summary', { materialId: item.id });
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name="book-outline" size={16} color={colors.textPrimary} />
-                    </TouchableOpacity>
-                  </View>
-                </Card>
+                    {/* Review Stats */}
+                    <View style={[styles.scheduleStatsBar, { backgroundColor: colors.surfaceSubtle }]}>
+                      <Text style={[styles.scheduleStatText, { color: colors.textSecondary }]}>
+                        Interval: <Text style={{ fontWeight: '700' }}>{item.reviewIntervalDays || 1}d</Text>
+                      </Text>
+                      <Text style={[styles.scheduleStatText, { color: colors.textSecondary }]}>
+                        Recall: <Text style={{ fontWeight: '700' }}>{item.lastReviewScore ? `${item.lastReviewScore}%` : 'New'}</Text>
+                      </Text>
+                      <Text style={[styles.scheduleStatText, { color: colors.textSecondary }]}>
+                        Level: <Text style={{ fontWeight: '700' }}>{item.repetitionNumber || 0}</Text>
+                      </Text>
+                    </View>
+
+                    {/* Actions */}
+                    <View style={styles.cardActionRow}>
+                      <TouchableOpacity
+                        style={[styles.reviewActionBtn, { backgroundColor: colors.primary }]}
+                        onPress={() => {
+                          setActiveMaterial(item);
+                          navigation.navigate('Quiz', { materialId: item.id });
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="help-circle-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                        <Text style={styles.reviewActionBtnText}>Practice Spaced Quiz</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.reviewSummaryBtn, { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle }]}
+                        onPress={() => {
+                          setActiveMaterial(item);
+                          navigation.navigate('Summary', { materialId: item.id });
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="book-outline" size={16} color={colors.textPrimary} />
+                      </TouchableOpacity>
+                    </View>
+                  </Card>
+                </StaggeredListItem>
               );
             })
           )}
@@ -456,58 +460,59 @@ export const LibraryScreen: React.FC = () => {
               )}
             </Card>
           ) : (
-            filteredMaterials.map((item) => {
+            filteredMaterials.map((item, idx) => {
               const badge = getBadgeDetails(item.type);
               const reviewBadge = getReviewBadge(item);
               const estReadMinutes = Math.max(1, Math.round(item.wordCount / 180));
 
               return (
-                <TouchableOpacity
-                  key={item.id}
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    setActiveMaterial(item);
-                    navigation.navigate('Summary', { materialId: item.id });
-                  }}
-                >
-                  <Card variant="surface" style={styles.card}>
-                    <View style={styles.cardHeader}>
-                      <View style={styles.badgeRow}>
-                        <Badge label={badge.label} variant={badge.variant} />
-                        <Badge label={reviewBadge.label} variant={reviewBadge.variant} />
+                <StaggeredListItem key={item.id} index={idx}>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      setActiveMaterial(item);
+                      navigation.navigate('Summary', { materialId: item.id });
+                    }}
+                  >
+                    <Card variant="surface" style={styles.card}>
+                      <View style={styles.cardHeader}>
+                        <View style={styles.badgeRow}>
+                          <Badge label={badge.label} variant={badge.variant} />
+                          <Badge label={reviewBadge.label} variant={reviewBadge.variant} />
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => handleDelete(item)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Ionicons name="trash-outline" size={16} color={colors.textTertiary} />
+                        </TouchableOpacity>
                       </View>
-                      <TouchableOpacity
-                        onPress={() => handleDelete(item)}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+
+                      <Text style={[styles.itemTitle, { color: colors.textPrimary }]}>
+                        {item.title}
+                      </Text>
+
+                      <Text
+                        style={[styles.itemSnippet, { color: colors.textSecondary }]}
+                        numberOfLines={2}
                       >
-                        <Ionicons name="trash-outline" size={16} color={colors.textTertiary} />
-                      </TouchableOpacity>
-                    </View>
+                        {item.summary?.overview || item.extractedText.substring(0, 160)}
+                      </Text>
 
-                    <Text style={[styles.itemTitle, { color: colors.textPrimary }]}>
-                      {item.title}
-                    </Text>
-
-                    <Text
-                      style={[styles.itemSnippet, { color: colors.textSecondary }]}
-                      numberOfLines={2}
-                    >
-                      {item.summary?.overview || item.extractedText.substring(0, 160)}
-                    </Text>
-
-                    <View style={styles.cardFooter}>
-                      <View style={styles.metaCol}>
-                        <Text style={[styles.subjectTag, { color: colors.primary }]}>
-                          {item.subject}
-                        </Text>
-                        <Text style={[styles.itemMeta, { color: colors.textTertiary }]}>
-                          ~{estReadMinutes} min read ({item.wordCount} words)
-                        </Text>
+                      <View style={styles.cardFooter}>
+                        <View style={styles.metaCol}>
+                          <Text style={[styles.subjectTag, { color: colors.primary }]}>
+                            {item.subject}
+                          </Text>
+                          <Text style={[styles.itemMeta, { color: colors.textTertiary }]}>
+                            ~{estReadMinutes} min read ({item.wordCount} words)
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
                       </View>
-                      <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
-                    </View>
-                  </Card>
-                </TouchableOpacity>
+                    </Card>
+                  </TouchableOpacity>
+                </StaggeredListItem>
               );
             })
           )}

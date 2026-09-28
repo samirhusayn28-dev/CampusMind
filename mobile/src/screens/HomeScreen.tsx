@@ -21,6 +21,7 @@ import { IngestionModal } from '../components/IngestionModal';
 import { HabitTrackerCard } from '../components/HabitTrackerCard';
 import { isDueForReview, getReviewBadge } from '../services/spacedRepetition';
 import { triggerHaptic } from '../services/haptics';
+import { AnimatedPressable, FadeSlideView } from '../theme/animations';
 import { spacing, borderRadius } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
@@ -242,11 +243,11 @@ export const HomeScreen: React.FC = () => {
         </Text>
         <View style={styles.grid}>
           {quickActions.map((action, idx) => (
-            <TouchableOpacity
+            <AnimatedPressable
               key={idx}
               style={[styles.actionCard, { backgroundColor: action.bg }]}
               onPress={() => handleOpenAction(action.type)}
-              activeOpacity={0.8}
+              scaleTarget={0.96}
             >
               <View style={[styles.iconCircle, { backgroundColor: colors.surface }]}>
                 <Ionicons name={action.icon as any} size={22} color={action.color} />
@@ -257,13 +258,13 @@ export const HomeScreen: React.FC = () => {
               <Text style={[styles.actionSubtext, { color: colors.textSecondary }]}>
                 {action.subtitle}
               </Text>
-            </TouchableOpacity>
+            </AnimatedPressable>
           ))}
         </View>
 
         {/* Recent Study Materials Section */}
         {materials.length > 0 && (
-          <>
+          <FadeSlideView slideDistance={10} duration={250}>
             <View style={styles.sectionHeaderRow}>
               <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
                 Recent Materials
@@ -274,34 +275,33 @@ export const HomeScreen: React.FC = () => {
             </View>
 
             {materials.slice(0, 3).map((item) => (
-              <TouchableOpacity
+              <Card
                 key={item.id}
-                activeOpacity={0.8}
+                variant="surface"
+                style={styles.recentCard}
                 onPress={() => {
                   setActiveMaterial(item);
                   navigation.navigate('Summary', { materialId: item.id });
                 }}
               >
-                <Card variant="surface" style={styles.recentCard}>
-                  <View style={styles.recentCardHeader}>
-                    <Badge
-                      label={item.type.toUpperCase()}
-                      variant={getBadgeVariant(item.type)}
-                    />
-                    <Text style={[styles.recentSubject, { color: colors.textTertiary }]}>
-                      {item.subject}
-                    </Text>
-                  </View>
-                  <Text style={[styles.recentTitle, { color: colors.textPrimary }]}>
-                    {item.title}
+                <View style={styles.recentCardHeader}>
+                  <Badge
+                    label={item.type.toUpperCase()}
+                    variant={getBadgeVariant(item.type)}
+                  />
+                  <Text style={[styles.recentSubject, { color: colors.textTertiary }]}>
+                    {item.subject}
                   </Text>
-                  <Text style={[styles.recentSnippet, { color: colors.textSecondary }]} numberOfLines={2}>
-                    {item.summary?.overview || item.extractedText.substring(0, 120)}
-                  </Text>
-                </Card>
-              </TouchableOpacity>
+                </View>
+                <Text style={[styles.recentTitle, { color: colors.textPrimary }]}>
+                  {item.title}
+                </Text>
+                <Text style={[styles.recentSnippet, { color: colors.textSecondary }]} numberOfLines={2}>
+                  {item.summary?.overview || item.extractedText.substring(0, 120)}
+                </Text>
+              </Card>
             ))}
-          </>
+          </FadeSlideView>
         )}
       </ScrollView>
 
