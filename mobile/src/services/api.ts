@@ -532,6 +532,16 @@ export async function extractOcrText(imageBase64: string): Promise<ExtractionRes
   };
 }
 
+function sampleTextForAi(text: string, maxLen: number = 24000): string {
+  const trimmed = (text || '').trim();
+  if (trimmed.length <= maxLen) return trimmed;
+  const headLen = 10000;
+  const tailLen = 6000;
+  const midLen = 8000;
+  const midStart = Math.floor((trimmed.length - midLen) / 2);
+  return `${trimmed.slice(0, headLen)}\n\n[... content omitted for length ...]\n\n${trimmed.slice(midStart, midStart + midLen)}\n\n[... content omitted for length ...]\n\n${trimmed.slice(-tailLen)}`;
+}
+
 // 5. CampusMind AI Summarization via backend
 export interface SummarizeResponse {
   title: string;
@@ -557,7 +567,7 @@ export async function summarizeContent(
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: trimmed, title, contentType, educationLevel }),
+      body: JSON.stringify({ text: sampleTextForAi(trimmed), title, contentType, educationLevel }),
     },
     'generate the summary'
   );
@@ -614,7 +624,7 @@ export async function generateQuizContent(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        text,
+        text: sampleTextForAi(text),
         title,
         summary,
         questionCount,

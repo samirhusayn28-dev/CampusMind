@@ -56,6 +56,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const arrayBuffer = await fileBlob.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
+    // Validate authentic PDF format via magic bytes
+    const fileHeader = buffer.subarray(0, 1024).toString('latin1');
+    if (!fileHeader.includes('%PDF-')) {
+      return res.status(400).json({
+        error: "This doesn't look like a valid PDF. Please upload a real PDF file.",
+      });
+    }
+
     let cleanText = '';
     let numPages = 1;
     let infoResult: any = {};

@@ -84,7 +84,7 @@ export const HomeScreen: React.FC = () => {
   }[] = [
     {
       title: 'Upload PDF',
-      subtitle: 'Slides & textbooks',
+      subtitle: 'Slides & notes (Max 20MB)',
       icon: 'document-text-outline',
       bg: colors.primaryContainer,
       color: colors.primary,
@@ -466,6 +466,8 @@ const styles = StyleSheet.create({
   },
   actionCard: {
     width: '48%',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
     padding: spacing.md,
     borderRadius: borderRadius.lg,
     marginBottom: spacing.md,

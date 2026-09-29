@@ -441,3 +441,25 @@ export async function addCustomSubjectToFirestore(uid: string, newSubject: strin
     return [cleanSubject];
   }
 }
+
+// Remove and persist updated custom user subjects in Firestore
+export async function removeCustomSubjectFromFirestore(uid: string, subjectToRemove: string): Promise<string[]> {
+  const cleanSubject = subjectToRemove.trim();
+  if (!cleanSubject) return [];
+
+  const userRef = doc(db, 'users', uid);
+  try {
+    const docSnap = await getDoc(userRef);
+    const existing = docSnap.exists() ? (docSnap.data() as Partial<UserProfile>) : {};
+    const currentSubjects: string[] = existing.customSubjects || [];
+
+    const updated = currentSubjects.filter(
+      (s) => s.trim().toLowerCase() !== cleanSubject.toLowerCase()
+    );
+    await setDoc(userRef, { customSubjects: updated }, { merge: true });
+    return updated;
+  } catch (err) {
+    console.error('[Firestore] Failed to remove custom subject:', err);
+    return [];
+  }
+}

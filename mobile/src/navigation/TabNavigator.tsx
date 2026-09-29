@@ -21,8 +21,7 @@ const TabIconView: React.FC<{
   iconName: keyof typeof Ionicons.glyphMap;
   color: string;
   activeColor: string;
-  indicatorColor: string;
-}> = ({ focused, iconName, color, activeColor, indicatorColor }) => {
+}> = ({ focused, iconName, color, activeColor }) => {
   const scale = React.useRef(new Animated.Value(focused ? 1 : 0.95)).current;
   const opacity = React.useRef(new Animated.Value(focused ? 1 : 0.75)).current;
 
@@ -47,7 +46,6 @@ const TabIconView: React.FC<{
     <Animated.View
       style={[
         styles.iconContainer,
-        focused && { backgroundColor: indicatorColor },
         { transform: [{ scale }], opacity },
       ]}
     >
@@ -129,7 +127,6 @@ export const TabNavigator: React.FC = () => {
               iconName={iconName}
               color={color}
               activeColor={colors.primary}
-              indicatorColor={colors.tabBarIndicator}
             />
           );
         },

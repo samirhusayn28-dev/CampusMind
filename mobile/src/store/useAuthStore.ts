@@ -11,6 +11,7 @@ import {
   configureGoogleSignIn,
   completeUserProfileOnboarding,
   addCustomSubjectToFirestore,
+  removeCustomSubjectFromFirestore,
 } from '../services/firebase';
 import { loadCloudSettings, loadCloudHabits } from '../services/sync';
 import { useHabitStore } from './useHabitStore';
@@ -39,6 +40,7 @@ interface AuthStoreState {
   }) => Promise<void>;
   updateUserProfile: (data: Partial<UserProfile>) => void;
   addCustomSubject: (subject: string) => Promise<string>;
+  removeCustomSubject: (subject: string) => Promise<void>;
   clearError: () => void;
 }
 
@@ -231,6 +233,25 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
       }
     }
     return trimmed;
+  },
+
+  removeCustomSubject: async (subjectToRemove: string): Promise<void> => {
+    const trimmed = subjectToRemove.trim();
+    if (!trimmed) return;
+
+    const current = get().user;
+    const existing = current?.customSubjects || [];
+    const updated = existing.filter((s) => s.trim().toLowerCase() !== trimmed.toLowerCase());
+
+    get().updateUserProfile({ customSubjects: updated });
+
+    if (current?.uid && !current.isAnonymous) {
+      try {
+        await removeCustomSubjectFromFirestore(current.uid, trimmed);
+      } catch (e) {
+        console.warn('[Firestore] Failed to remove custom subject:', e);
+      }
+    }
   },
 
   clearError: () => set({ error: null }),

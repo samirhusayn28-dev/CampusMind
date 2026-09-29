@@ -61,7 +61,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const truncatedContent = text && text.length > 25000 ? text.substring(0, 25000) : text || '';
+    let processedContent = (text || '').trim();
+    if (processedContent.length > 24000) {
+      const head = processedContent.slice(0, 10000);
+      const midStart = Math.floor((processedContent.length - 8000) / 2);
+      const mid = processedContent.slice(midStart, midStart + 8000);
+      const tail = processedContent.slice(-6000);
+      processedContent = `${head}\n\n[... content omitted for length ...]\n\n${mid}\n\n[... content omitted for length ...]\n\n${tail}`;
+    }
     const summaryContext = summary ? JSON.stringify(summary) : '';
 
     let difficultyGuidance = 'Target level: Undergraduate / Bachelors. Questions should test core university concepts, analytical reasoning, and practical application.';
@@ -108,7 +115,7 @@ Respond ONLY with valid JSON matching this exact schema:
 Summary Key Points: ${summaryContext}
 Raw Text Content:
 """
-${truncatedContent}
+${processedContent}
 """
 
 Please generate ${questionCount} multiple choice practice questions in the specified JSON format.`;
@@ -124,6 +131,7 @@ Please generate ${questionCount} multiple choice practice questions in the speci
           ],
           model: GROQ_MODELS.text,
           temperature: attempt === 1 ? 0.3 : 0.1,
+          max_tokens: 2500,
           response_format: { type: 'json_object' },
         });
 

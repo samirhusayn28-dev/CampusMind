@@ -13,6 +13,18 @@
   "functions": {
     "api/extract/pdf.ts": {
       "maxDuration": 60
+    },
+    "api/ai/summarize.ts": {
+      "maxDuration": 60
+    },
+    "api/ai/quiz.ts": {
+      "maxDuration": 60
+    },
+    "api/ai/chat.ts": {
+      "maxDuration": 60
+    },
+    "api/ai/concept-map.ts": {
+      "maxDuration": 60
     }
   },
   "rewrites": [

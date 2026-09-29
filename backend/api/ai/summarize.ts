@@ -52,8 +52,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Limit text length to prevent token overflow (~30,000 characters)
-    const truncatedText = text.length > 30000 ? text.substring(0, 30000) + '...[truncated]' : text;
+    // Smart text sampling to prevent token overflow while capturing beginning, middle, and conclusion
+    let processedText = text.trim();
+    if (processedText.length > 24000) {
+      const head = processedText.slice(0, 10000);
+      const midStart = Math.floor((processedText.length - 8000) / 2);
+      const mid = processedText.slice(midStart, midStart + 8000);
+      const tail = processedText.slice(-6000);
+      processedText = `${head}\n\n[... content omitted for length ...]\n\n${mid}\n\n[... content omitted for length ...]\n\n${tail}`;
+    }
 
     if (!process.env.GROQ_API_KEY) {
       return res.status(500).json({
@@ -115,7 +122,7 @@ Respond ONLY with valid JSON matching this exact structure:
 Content Type: ${contentType}
 Raw Extracted Text:
 """
-${truncatedText}
+${processedText}
 """
 
 Please produce a comprehensive 5-10 key-points summary, auto-headings, and study guide in the specified JSON format strictly based on the text above.`;
@@ -132,6 +139,7 @@ Please produce a comprehensive 5-10 key-points summary, auto-headings, and study
           ],
           model: GROQ_MODELS.text,
           temperature: attempt === 1 ? 0.2 : 0.1,
+          max_tokens: 3000,
           response_format: { type: 'json_object' },
         });
 
@@ -147,8 +155,34 @@ Please produce a comprehensive 5-10 key-points summary, auto-headings, and study
       } catch (err: any) {
         lastError = err;
         console.warn(`[Summarize] Attempt ${attempt} failed: ${err.message}`);
-        if (attempt === 2) throw err;
+        if (attempt === 2) break;
       }
+    }
+
+    if (!parsedJson || (!parsedJson.overview && !parsedJson.keyPoints)) {
+      console.warn('[Summarize] Using heuristic fallback summary due to AI generation issue:', lastError?.message);
+      const paragraphs = text
+        .split(/\n\s*\n/)
+        .map((p) => p.trim())
+        .filter((p) => p.length > 30);
+      const firstPara = paragraphs[0] || text.slice(0, 300);
+      const overview = firstPara.length > 350 ? firstPara.slice(0, 350) + '...' : firstPara;
+      const keyPoints = paragraphs
+        .slice(1, 7)
+        .map((p) => (p.length > 160 ? p.slice(0, 160) + '...' : p));
+
+      parsedJson = {
+        title: title || 'Study Material Summary',
+        overview,
+        keyPoints: keyPoints.length > 0 ? keyPoints : [overview],
+        headings: [
+          {
+            title: 'Core Concepts & Study Guide',
+            points: keyPoints.length > 0 ? keyPoints : [overview],
+          },
+        ],
+        fullSummary: paragraphs.slice(0, 5).join('\n\n') || text.slice(0, 1500),
+      };
     }
 
     return res.status(200).json({
@@ -157,6 +191,26 @@ Please produce a comprehensive 5-10 key-points summary, auto-headings, and study
     });
   } catch (error: any) {
     console.error('[CampusMind Summarization Error]', error);
+    // Even if an unexpected outer exception occurs, return structured fallback if text exists
+    try {
+      const rawText = (req.body?.text || '').trim();
+      if (rawText.length >= 20) {
+        const paras = rawText.split(/\n\s*\n/).map((p: string) => p.trim()).filter((p: string) => p.length > 30);
+        const overview = (paras[0] || rawText.slice(0, 300)).slice(0, 350);
+        const keyPoints = paras.slice(1, 7).map((p: string) => (p.length > 160 ? p.slice(0, 160) + '...' : p));
+        return res.status(200).json({
+          success: true,
+          summary: {
+            title: req.body?.title || 'Study Material Summary',
+            overview,
+            keyPoints: keyPoints.length > 0 ? keyPoints : [overview],
+            headings: [{ title: 'Overview & Key Points', points: keyPoints.length > 0 ? keyPoints : [overview] }],
+            fullSummary: paras.slice(0, 5).join('\n\n') || rawText.slice(0, 1500),
+          },
+        });
+      }
+    } catch (_) {}
+
     return res.status(500).json({
       error: 'Unable to generate summary from this content. Please verify your material and try again.',
       details: error.message,

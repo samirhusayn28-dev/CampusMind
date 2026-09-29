@@ -55,6 +55,7 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
   const { colors, isDark } = useThemeStore();
   const user = useAuthStore((state) => state.user);
   const addCustomSubject = useAuthStore((state) => state.addCustomSubject);
+  const removeCustomSubject = useAuthStore((state) => state.removeCustomSubject);
   const {
     isIngesting,
     ingestionStage,
@@ -179,6 +180,28 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
     setCustomSubjectText('');
   };
 
+  const handleRemoveCustomSubject = async (subj: string) => {
+    const materials = useContentStore.getState().materials;
+    const assignedMaterials = materials.filter(
+      (m) => m.subject?.trim().toLowerCase() === subj.trim().toLowerCase()
+    );
+    if (assignedMaterials.length > 0) {
+      triggerHaptic('errorNotification');
+      showThemedAlert(
+        'Subject in Use',
+        `Cannot remove "${subj}" because ${assignedMaterials.length} study item(s) are assigned to it. Please reassign or delete those materials first.`
+      );
+      return;
+    }
+
+    triggerHaptic('mediumImpact');
+    await removeCustomSubject(subj);
+    if (selectedSubject.trim().toLowerCase() === subj.trim().toLowerCase()) {
+      setSelectedSubject('General');
+    }
+    showThemedToast('info', `Removed "${subj}" from custom subjects.`);
+  };
+
   const renderSubjectSelector = (disabled: boolean = false) => (
     <View style={styles.subjectSelectorContainer}>
       <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>Assign Course / Subject</Text>
@@ -189,6 +212,7 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
       >
         {allSubjects.map((subj) => {
           const isSel = selectedSubject === subj;
+          const isCustom = !DEFAULT_SUBJECTS.includes(subj);
           return (
             <TouchableOpacity
               key={subj}
@@ -211,6 +235,22 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
               >
                 {subj}
               </Text>
+              {isCustom && !disabled && (
+                <TouchableOpacity
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  onPress={(e) => {
+                    e.stopPropagation?.();
+                    handleRemoveCustomSubject(subj);
+                  }}
+                  style={styles.removeSubjectBtn}
+                >
+                  <Ionicons
+                    name="close-circle"
+                    size={14}
+                    color={isSel ? colors.onPrimary : colors.textTertiary}
+                  />
+                </TouchableOpacity>
+              )}
             </TouchableOpacity>
           );
         })}
@@ -313,6 +353,35 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
 
       const file = res.assets[0];
 
+      // Bug 2: Client-side validation for authentic PDF format (extension + MIME + magic bytes %PDF-)
+      const fileNameLower = (file.name || '').toLowerCase();
+      if (!fileNameLower.endsWith('.pdf') || (file.mimeType && file.mimeType !== 'application/pdf')) {
+        triggerHaptic('errorNotification');
+        showThemedAlert(
+          'Invalid File Format',
+          "This doesn't look like a valid PDF. Please upload a real PDF file."
+        );
+        return;
+      }
+
+      try {
+        const headerB64 = await FileSystem.readAsStringAsync(file.uri, {
+          length: 1024,
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        const headerStr = atob(headerB64.slice(0, 512));
+        if (!headerStr.includes('%PDF-')) {
+          triggerHaptic('errorNotification');
+          showThemedAlert(
+            'Invalid PDF File',
+            "This doesn't look like a valid PDF. Please upload a real PDF file."
+          );
+          return;
+        }
+      } catch (checkErr) {
+        console.warn('[PDF Validation] Could not inspect magic bytes:', checkErr);
+      }
+
       // Client-side 20MB check
       if (file.size && file.size > MAX_PDF_SIZE_BYTES) {
         triggerHaptic('errorNotification');
@@ -348,7 +417,7 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
         blob = new Blob([byteArray], { type: 'application/pdf' });
       }
 
-      // 3. Direct upload to Supabase signed URL using XMLHttpRequest with live progress tracking
+      // 3. Direct upload to Supabase signed URL using XMLHttpRequest with live clamped progress tracking
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('PUT', signedUrl);
@@ -356,10 +425,10 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
 
         if (xhr.upload) {
           xhr.upload.onprogress = (event) => {
-            if (event.lengthComputable && event.total > 0) {
-              const progress = Math.round(
-                (event.loaded / event.total) * 100
-              );
+            const totalBytes = Math.max(event.total || 0, file.size || 1);
+            if (event.loaded > 0 && totalBytes > 0) {
+              const rawPercent = Math.round((event.loaded / totalBytes) * 100);
+              const progress = Math.min(99, Math.max(0, rawPercent));
               setPdfUploadProgress(progress);
             }
           };
@@ -367,6 +436,7 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
 
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) {
+            setPdfUploadProgress(100);
             resolve();
           } else {
             reject(new Error(`Storage upload failed with status ${xhr.status}`));
@@ -903,6 +973,9 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
                     <Text style={[styles.contentCardDesc, { color: colors.textSecondary }]}>
                       Upload lecture slide decks, syllabus sheets, or textbook chapters.
                     </Text>
+                    <Text style={[styles.fileLimitHint, { color: colors.textTertiary }]}>
+                      Max file size: 20 MB. If your PDF is larger, please compress it before uploading.
+                    </Text>
 
                     {pdfUploadProgress !== null ? (
                       <View style={styles.pdfProgressBox}>
@@ -1011,7 +1084,7 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
                     <View style={styles.audioBtnRow}>
                       {!isRecording ? (
                         <AnimatedPressable
-                          style={[styles.primaryActionBtn, { backgroundColor: colors.lavender, flex: 1 }]}
+                          style={[styles.primaryActionBtn, { backgroundColor: colors.lavender }]}
                           onPress={startRecording}
                           disabled={isIngesting}
                           scaleTarget={0.97}
@@ -1023,7 +1096,7 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
                         </AnimatedPressable>
                       ) : (
                         <AnimatedPressable
-                          style={[styles.primaryActionBtn, { backgroundColor: colors.peach, flex: 1 }]}
+                          style={[styles.primaryActionBtn, { backgroundColor: colors.peach }]}
                           onPress={stopAndUploadRecording}
                           disabled={isIngesting}
                           scaleTarget={0.97}
@@ -1369,8 +1442,20 @@ const styles = StyleSheet.create({
     ...typography.presets.bodySmall,
     textAlign: 'center',
     lineHeight: 18,
-    marginBottom: spacing.md,
+    marginBottom: spacing.xs,
     paddingHorizontal: spacing.sm,
+  },
+  fileLimitHint: {
+    ...typography.presets.caption,
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+    lineHeight: 16,
+    paddingHorizontal: spacing.sm,
+  },
+  removeSubjectBtn: {
+    marginLeft: 4,
+    padding: 2,
   },
   primaryActionBtn: {
     flexDirection: 'row',

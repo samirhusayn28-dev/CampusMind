@@ -54,6 +54,8 @@ interface AnimatedPressableProps extends PressableProps {
  * Apple/iOS-style subtle pressable component with gentle scale-down & spring recovery.
  * Animates strictly transform and opacity with useNativeDriver: true.
  */
+const AnimatedPressableComponent = Animated.createAnimatedComponent(Pressable);
+
 export const AnimatedPressable: React.FC<AnimatedPressableProps> = ({
   style,
   scaleTarget = 0.97,
@@ -114,24 +116,21 @@ export const AnimatedPressable: React.FC<AnimatedPressableProps> = ({
   };
 
   return (
-    <Pressable
+    <AnimatedPressableComponent
       disabled={disabled}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
+      style={[
+        style,
+        {
+          transform: [{ scale: scaleAnim }],
+          opacity: opacityAnim,
+        },
+      ]}
       {...rest}
     >
-      <Animated.View
-        style={[
-          style,
-          {
-            transform: [{ scale: scaleAnim }],
-            opacity: opacityAnim,
-          },
-        ]}
-      >
-        {children}
-      </Animated.View>
-    </Pressable>
+      {children}
+    </AnimatedPressableComponent>
   );
 };
 

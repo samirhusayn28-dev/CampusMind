@@ -1,5 +1,5 @@
 // CampusMind In-App Release & Update Checker
-export const CURRENT_APP_VERSION = '1.3.0';
+export const CURRENT_APP_VERSION = '1.3.1';
 
 export interface AppUpdateInfo {
   updateAvailable: boolean;

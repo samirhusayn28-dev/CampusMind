@@ -147,10 +147,13 @@ jobs:
 
             Download and install the standalone **CampusMind Universal Android APK** directly onto your phone without needing Expo Go or any local developer setup.
 
-            ### 🚀 What's New in v1.3.0:
-            - **Large PDF Upload (Up to 20MB):** Direct client-to-storage signed uploads via Supabase Storage with real-time percentage progress bar and fast backend serverless extraction.
-            - **Offline Handling & No Internet Screen:** Automatic network detection using `@react-native-community/netinfo` with a friendly "No Internet" screen and automatic retry on reconnect.
-            - **iOS-Style Fluid Animations:** Spring-based touch feedback on interactive cards, smooth tab switches, and staggered entrance animations for library materials.
+            ### 🚀 What's New in v1.3.1:
+            - **Large PDF & AI Summarization Fixes:** Resolved timeouts on large 15–20MB PDFs with smart text sampling, 60s function duration, and reliable AI summary and quiz generation.
+            - **PDF Validation & Upload Progress:** Added strict magic bytes checking (%PDF-) on client and backend to reject corrupted/non-PDF files, clamped upload progress strictly within 0–100%, and added a 20MB max file indicator.
+            - **UI & Layout Fixes:** Fixed squeezed action cards on the Home screen, centered the "Choose PDF from Files" button, and centered the translation loading state.
+            - **Restored Audio & Notes OCR Action Buttons:** Fully restored "Start Recording" and camera/gallery buttons with intact click handlers.
+            - **Custom Course/Subject Removal:** Added ability to remove custom subjects in the modal with safeguards preventing accidental deletion if materials are assigned.
+            - **Refined Navigation:** Removed unwanted background pill indicator when tapping bottom navigation icons.
 
             ### ✨ Core Features:
             - **Material You Aesthetic:** Soft pastel palette, cozy warm charcoal dark mode, rounded Plus Jakarta Sans typography, and fluid micro-interactions.

@@ -784,10 +784,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   translatingCard: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
+    justifyContent: 'center',
+    padding: spacing.xl,
     borderRadius: borderRadius.lg,
   },
   translatingText: {
