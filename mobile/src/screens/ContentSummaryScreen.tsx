@@ -24,6 +24,10 @@ import { speakText, stopSpeech, pauseSpeech, resumeSpeech } from '../services/sp
 import { spacing, borderRadius, shadows } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { useStudySession } from '../services/studyTimer';
+import { isTextReadable } from '../utils/textQuality';
+import { StructuredTableRenderer } from '../components/StructuredTableRenderer';
+import { StructuredChartRenderer } from '../components/StructuredChartRenderer';
+import { EditMaterialModal } from '../components/EditMaterialModal';
 
 interface ContentSummaryScreenProps {
   onBack?: () => void;
@@ -66,7 +70,11 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = (props)
     translateMaterialSummary,
   } = useContentStore();
 
+  const [selectedMaterialId, setSelectedMaterialId] = useState<string | null>(materialId || null);
+  const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+
   const material =
+    (selectedMaterialId ? materials.find((m) => m.id === selectedMaterialId) : null) ||
     propMaterial ||
     (materialId ? materials.find((m) => m.id === materialId) : null) ||
     activeMaterial;
@@ -224,18 +232,25 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = (props)
     }
   };
 
-  const getTypeBadge = (type: ContentType) => {
+  const getTypeBadge = (type: ContentType, originalFileName?: string) => {
     switch (type) {
       case 'youtube': return { label: 'YouTube Video', variant: 'peach' as const };
       case 'audio': return { label: 'Audio Lecture', variant: 'lavender' as const };
       case 'ocr': return { label: 'Notes OCR', variant: 'sky' as const };
       case 'pdf':
-      default: return { label: 'PDF Document', variant: 'sage' as const };
+      default: {
+        const ext = originalFileName?.split('.').pop()?.toLowerCase();
+        if (ext === 'docx') return { label: 'Word Document', variant: 'sage' as const };
+        if (ext === 'pptx') return { label: 'PowerPoint Slides', variant: 'sage' as const };
+        if (ext === 'xlsx' || ext === 'csv') return { label: 'Spreadsheet', variant: 'sage' as const };
+        return { label: 'PDF Document', variant: 'sage' as const };
+      }
     }
   };
 
-  const badge = getTypeBadge(material.type);
+  const badge = getTypeBadge(material.type, material.originalFileName);
   const summary = material.summary;
+  const textQuality = isTextReadable(material.extractedText);
 
   // Active translation
   const translation: TranslatedContent | undefined =
@@ -266,6 +281,14 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = (props)
         </TouchableOpacity>
 
         <View style={styles.topBadgesRow}>
+          <TouchableOpacity
+            style={[styles.editIconBtn, { backgroundColor: colors.surfaceSubtle }]}
+            onPress={() => setIsEditModalVisible(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="create-outline" size={14} color={colors.primary} />
+            <Text style={[styles.editBtnText, { color: colors.primary }]}>Edit</Text>
+          </TouchableOpacity>
           <Badge label={material.subject} variant="subtle" />
           <Badge label={badge.label} variant={badge.variant} />
         </View>
@@ -421,6 +444,18 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = (props)
                 variant="primary"
                 size="medium"
               />
+            </Card>
+          ) : !textQuality.readable ? (
+            <Card variant="peach" style={styles.generatePromptCard}>
+              <View style={[styles.aiIconWrapper, { backgroundColor: colors.surface }]}>
+                <Ionicons name="alert-circle-outline" size={28} color={colors.peach} />
+              </View>
+              <Text style={[styles.generateTitle, { color: colors.peach }]}>
+                Unreadable Document Text
+              </Text>
+              <Text style={[styles.generateDesc, { color: colors.textSecondary }]}>
+                We couldn't read this document's text properly. Try re-exporting it, or use Notes OCR instead.
+              </Text>
             </Card>
           ) : (
             <Card variant="sage" style={styles.generatePromptCard}>
@@ -606,6 +641,16 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = (props)
               </Card>
             )}
 
+            {/* Structured Tables (if present from spreadsheets/docs) */}
+            {summary.tables && summary.tables.length > 0 && (
+              <StructuredTableRenderer tables={summary.tables} />
+            )}
+
+            {/* Structured Visual Charts (if numeric data is present) */}
+            {summary.charts && summary.charts.length > 0 && (
+              <StructuredChartRenderer charts={summary.charts} />
+            )}
+
             {/* Quick Actions for Next Stages */}
             <View style={styles.actionRow}>
               {onNavigateToQuiz && (
@@ -645,6 +690,15 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = (props)
                   <Text style={[styles.toolBtnText, { color: colors.sky }]}>Concept Map</Text>
                 </TouchableOpacity>
               )}
+
+              <TouchableOpacity
+                style={[styles.toolBtn, { backgroundColor: colors.primaryContainer }]}
+                onPress={() => setIsEditModalVisible(true)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="create-outline" size={18} color={colors.primary} />
+                <Text style={[styles.toolBtnText, { color: colors.primary }]}>Edit Content</Text>
+              </TouchableOpacity>
             </View>
           </>
         )}
@@ -666,6 +720,17 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = (props)
               <Text style={[styles.collapsibleTitle, { color: colors.textPrimary }]}>
                 Original Extracted Text
               </Text>
+              <TouchableOpacity
+                style={[styles.editInlineBtn, { backgroundColor: colors.primaryContainer }]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  setIsEditModalVisible(true);
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="create-outline" size={12} color={colors.primary} />
+                <Text style={[styles.editInlineBtnText, { color: colors.primary }]}>Edit</Text>
+              </TouchableOpacity>
             </View>
             <Ionicons
               name={showOriginalText ? 'chevron-up' : 'chevron-down'}
@@ -676,13 +741,31 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = (props)
 
           {showOriginalText && (
             <View style={[styles.originalTextBox, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.originalTextContent, { color: colors.textSecondary }]}>
-                {material.extractedText}
-              </Text>
+              {textQuality.readable ? (
+                <Text style={[styles.originalTextContent, { color: colors.textSecondary }]}>
+                  {material.extractedText}
+                </Text>
+              ) : (
+                <Text style={[styles.originalTextContent, { color: colors.textTertiary, fontStyle: 'italic' }]}>
+                  Text contains unreadable formatting or binary characters and cannot be rendered cleanly.
+                </Text>
+              )}
             </View>
           )}
         </Card>
       </ScrollView>
+
+      {material && (
+        <EditMaterialModal
+          visible={isEditModalVisible}
+          onClose={() => setIsEditModalVisible(false)}
+          material={material}
+          onSuccess={(newMaterial) => {
+            setSelectedMaterialId(newMaterial.id);
+            useContentStore.getState().setActiveMaterial(newMaterial);
+          }}
+        />
+      )}
     </View>
   );
 };
@@ -992,5 +1075,33 @@ const styles = StyleSheet.create({
   originalTextContent: {
     ...typography.presets.bodySmall,
     lineHeight: 20,
+  },
+  editIconBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 5,
+    borderRadius: borderRadius.full,
+    marginRight: 6,
+  },
+  editBtnText: {
+    ...typography.presets.caption,
+    fontSize: 11,
+    fontWeight: '700',
+    marginLeft: 3,
+  },
+  editInlineBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: borderRadius.full,
+    marginLeft: spacing.sm,
+  },
+  editInlineBtnText: {
+    ...typography.presets.caption,
+    fontSize: 11,
+    fontWeight: '700',
+    marginLeft: 2,
   },
 });

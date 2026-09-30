@@ -14,6 +14,9 @@
     "api/extract/pdf.ts": {
       "maxDuration": 60
     },
+    "api/extract/document.ts": {
+      "maxDuration": 60
+    },
     "api/ai/summarize.ts": {
       "maxDuration": 60
     },
@@ -24,6 +27,9 @@
       "maxDuration": 60
     },
     "api/ai/concept-map.ts": {
+      "maxDuration": 60
+    },
+    "api/storage/delete.ts": {
       "maxDuration": 60
     }
   },

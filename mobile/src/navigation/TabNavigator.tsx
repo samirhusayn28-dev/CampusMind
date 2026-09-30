@@ -16,6 +16,7 @@ import { typography } from '../theme/typography';
 import { AnimatedPressable, IOS_EASING } from '../theme/animations';
 import { Animated } from 'react-native';
 
+// NOTE: Do NOT reintroduce indicatorColor, background pills, or tooltip bubble styling behind tab icons.
 const TabIconView: React.FC<{
   focused: boolean;
   iconName: keyof typeof Ionicons.glyphMap;
@@ -92,14 +93,15 @@ export const TabNavigator: React.FC = () => {
         tabBarItemStyle: {
           overflow: 'hidden',
         },
-        // iOS-style subtle scale press feedback
+        // Clean native press feedback: TouchableOpacity completely eliminates Android circular ripple bubbles/popups.
+        // NOTE: Do NOT use Pressable/AnimatedPressable here because React Navigation injects an android_ripple
+        // that produces an unwanted circular popup/tooltip bubble behind active tabs on Android.
         tabBarButton: (props) => {
           const { ref, ...rest } = props as any;
           return (
-            <AnimatedPressable
+            <TouchableOpacity
               {...rest}
-              scaleTarget={0.94}
-              activeOpacity={0.82}
+              activeOpacity={0.8}
               onPress={(e: any) => {
                 triggerHaptic('lightImpact');
                 props.onPress?.(e);

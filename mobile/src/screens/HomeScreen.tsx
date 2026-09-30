@@ -24,6 +24,7 @@ import { triggerHaptic } from '../services/haptics';
 import { AnimatedPressable, FadeSlideView } from '../theme/animations';
 import { spacing, borderRadius } from '../theme/spacing';
 import { typography } from '../theme/typography';
+import { getSafeTextPreview } from '../utils/textQuality';
 
 export const HomeScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -83,8 +84,8 @@ export const HomeScreen: React.FC = () => {
     type: ContentType;
   }[] = [
     {
-      title: 'Upload PDF',
-      subtitle: 'Slides & notes (Max 20MB)',
+      title: 'Upload Document',
+      subtitle: 'PDF, Word, Slides, Sheets',
       icon: 'document-text-outline',
       bg: colors.primaryContainer,
       color: colors.primary,
@@ -206,8 +207,9 @@ export const HomeScreen: React.FC = () => {
               </Text>
 
               <Text style={[styles.revisionSummary, { color: colors.textSecondary }]} numberOfLines={2}>
-                {dueItem.summary?.overview ||
-                  dueItem.extractedText.substring(0, 140) + '...'}
+                {dueItem.summary?.overview
+                  ? getSafeTextPreview(dueItem.summary.overview, 140)
+                  : getSafeTextPreview(dueItem.extractedText, 140)}
               </Text>
 
               <View style={[styles.revisionFooter, { borderTopColor: colors.borderSubtle }]}>
@@ -297,7 +299,9 @@ export const HomeScreen: React.FC = () => {
                   {item.title}
                 </Text>
                 <Text style={[styles.recentSnippet, { color: colors.textSecondary }]} numberOfLines={2}>
-                  {item.summary?.overview || item.extractedText.substring(0, 120)}
+                  {item.summary?.overview
+                    ? getSafeTextPreview(item.summary.overview, 120)
+                    : getSafeTextPreview(item.extractedText, 120)}
                 </Text>
               </Card>
             ))}

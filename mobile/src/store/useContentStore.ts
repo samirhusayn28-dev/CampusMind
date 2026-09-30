@@ -9,6 +9,7 @@ import {
   translateSummaryContent,
   generateQuizContent,
   generateConceptMapContent,
+  deleteSupabaseStorageFiles,
 } from '../services/api';
 import {
   saveMaterial,
@@ -17,6 +18,7 @@ import {
 } from '../services/content';
 import { calculateNextReview } from '../services/spacedRepetition';
 import { useAuthStore } from './useAuthStore';
+import { isTextReadable } from '../utils/textQuality';
 
 interface ContentStoreState {
   materials: StudyMaterial[];
@@ -40,6 +42,12 @@ interface ContentStoreState {
     userId: string,
     subject?: string
   ) => Promise<StudyMaterial>;
+  ingestDocument: (
+    storagePath: string,
+    fileName: string,
+    userId: string,
+    subject?: string
+  ) => Promise<StudyMaterial>;
   ingestYouTube: (url: string, userId: string, subject?: string) => Promise<StudyMaterial>;
   ingestAudio: (audioBase64: string, durationSeconds: number, userId: string, subject?: string) => Promise<StudyMaterial>;
   ingestOcr: (imageBase64: string, userId: string, subject?: string) => Promise<StudyMaterial>;
@@ -52,6 +60,7 @@ interface ContentStoreState {
     originalFileName?: string;
     sourceUrl?: string;
     audioDurationSeconds?: number;
+    storagePath?: string;
   }) => Promise<StudyMaterial>;
   generateSummaryForMaterial: (materialId: string, userId: string) => Promise<StudyMaterial>;
   translateMaterialSummary: (materialId: string, targetLang: 'roman_urdu' | 'urdu', userId: string) => Promise<StudyMaterial>;
@@ -59,6 +68,7 @@ interface ContentStoreState {
   generateConceptMapForMaterial: (materialId: string, userId: string) => Promise<ConceptMapData>;
   recordMaterialReview: (materialId: string, performanceScore: number) => Promise<StudyMaterial>;
   deleteMaterial: (id: string, userId: string) => Promise<void>;
+  cascadeDeleteSubject: (subjectName: string, userId: string) => Promise<number>;
   setActiveMaterial: (material: StudyMaterial | null) => void;
   clearError: () => void;
 }
@@ -96,9 +106,22 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
   loadMaterials: async (userId: string) => {
     try {
       const items = await fetchUserMaterials(userId);
-      set({ materials: items });
-      if (items.length > 0 && !get().activeMaterial) {
-        set({ activeMaterial: items[0] });
+      // Migration & quality check for legacy saved materials:
+      // Flag any legacy materials whose extractedText is unreadable/garbled
+      const sanitizedItems = items.map((m) => {
+        if (m.extractedText && !isTextReadable(m.extractedText).readable) {
+          return {
+            ...m,
+            status: 'error' as const,
+            errorMessage: "We couldn't read this material's text properly. Try re-exporting it, or use Notes OCR instead.",
+          };
+        }
+        return m;
+      });
+
+      set({ materials: sanitizedItems });
+      if (sanitizedItems.length > 0 && !get().activeMaterial) {
+        set({ activeMaterial: sanitizedItems[0] });
       }
     } catch (err: any) {
       console.warn('Error loading materials:', err);
@@ -107,7 +130,7 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
 
   setUploadProgress: (progress: number) => set({ uploadProgress: progress }),
 
-  ingestPdf: async (
+  ingestDocument: async (
     storagePath: string,
     fileName: string,
     userId: string,
@@ -123,17 +146,18 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
     try {
       const result = await extractPdfText(storagePath, fileName);
 
-      if (!result.text || result.text.trim().length < 20) {
-        throw new Error(`Could not extract readable text from "${fileName}". Minimum 20 characters required.`);
+      if (!result.text || result.text.trim().length < 20 || !isTextReadable(result.text).readable) {
+        throw new Error("We couldn't read this document's text properly. Try re-exporting it, or use Notes OCR instead.");
       }
 
       set({ ingestionStage: 'Saving study material...' });
       const newMaterial: StudyMaterial = {
-        id: `mat_pdf_${Date.now()}`,
+        id: `mat_doc_${Date.now()}`,
         userId,
         title: result.title || fileName,
         type: 'pdf',
         originalFileName: fileName,
+        storagePath,
         extractedText: result.text,
         wordCount: result.wordCount,
         subject,
@@ -161,10 +185,19 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
         ingestionStage: '',
         ingestionType: null,
         uploadProgress: 0,
-        error: err.message || 'Failed to ingest PDF',
+        error: err.message || 'Failed to ingest document',
       });
       throw err;
     }
+  },
+
+  ingestPdf: async (
+    storagePath: string,
+    fileName: string,
+    userId: string,
+    subject: string = 'General Studies'
+  ) => {
+    return get().ingestDocument(storagePath, fileName, userId, subject);
   },
 
   ingestYouTube: async (url: string, userId: string, subject: string = 'Computer Science') => {
@@ -336,10 +369,15 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
     originalFileName?: string;
     sourceUrl?: string;
     audioDurationSeconds?: number;
+    storagePath?: string;
   }) => {
     const trimmed = params.text.trim();
     if (!trimmed || trimmed.length < 10) {
       throw new Error('No readable text found. Minimum 10 characters required.');
+    }
+
+    if (!isTextReadable(trimmed).readable) {
+      throw new Error("We couldn't read this material's text properly. Try re-exporting it, or use Notes OCR instead.");
     }
 
     const newMaterial: StudyMaterial = {
@@ -349,6 +387,7 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
       type: params.type,
       originalFileName: params.originalFileName,
       sourceUrl: params.sourceUrl,
+      storagePath: params.storagePath,
       audioDurationSeconds: params.audioDurationSeconds,
       extractedText: trimmed,
       wordCount: trimmed.split(/\s+/).filter(Boolean).length,
@@ -374,8 +413,8 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
     const target = get().materials.find((m) => m.id === materialId);
     if (!target) throw new Error('Material not found');
 
-    if (!target.extractedText || target.extractedText.trim().length < 20) {
-      throw new Error("We couldn't extract enough readable text from this material to summarize. Please provide clearer notes.");
+    if (!target.extractedText || target.extractedText.trim().length < 20 || !isTextReadable(target.extractedText).readable) {
+      throw new Error("We couldn't read this material's text properly. Try re-exporting it, or use Notes OCR instead.");
     }
 
     set({ isSummarizing: true, error: null });
@@ -490,6 +529,10 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
       return target.quiz;
     }
 
+    if (!target.extractedText || target.extractedText.trim().length < 20 || !isTextReadable(target.extractedText).readable) {
+      throw new Error("We couldn't read this material's text properly. Try re-exporting it, or use Notes OCR instead.");
+    }
+
     set({ isGeneratingQuiz: true, error: null });
     try {
       const currentUser = useAuthStore.getState().user;
@@ -591,6 +634,12 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
   },
 
   deleteMaterial: async (id: string, userId: string) => {
+    const target = get().materials.find((m) => m.id === id);
+    if (target?.storagePath) {
+      deleteSupabaseStorageFiles([target.storagePath]).catch((err) =>
+        console.warn('[Storage Delete Warning]:', err)
+      );
+    }
     await deleteMaterialFromService(userId, id);
     notifyMaterialCountChange(-1);
     const remaining = get().materials.filter((m) => m.id !== id);
@@ -598,6 +647,46 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
       materials: remaining,
       activeMaterial: get().activeMaterial?.id === id ? remaining[0] || null : get().activeMaterial,
     });
+  },
+
+  cascadeDeleteSubject: async (subjectName: string, userId: string): Promise<number> => {
+    const cleanSubj = subjectName.trim().toLowerCase();
+    const matchingMaterials = get().materials.filter(
+      (m) => (m.subject || '').trim().toLowerCase() === cleanSubj
+    );
+
+    // 1. Delete physical files from Supabase Storage to avoid orphaned cloud storage
+    const storagePaths = matchingMaterials
+      .map((m) => m.storagePath)
+      .filter((p): p is string => Boolean(p && typeof p === 'string'));
+
+    if (storagePaths.length > 0) {
+      await deleteSupabaseStorageFiles(storagePaths).catch((err) =>
+        console.warn('[CascadeDelete] Storage file deletion warning:', err)
+      );
+    }
+
+    // 2. Cascade delete all documents from Firestore
+    for (const mat of matchingMaterials) {
+      await deleteMaterialFromService(userId, mat.id).catch((err) =>
+        console.warn(`[CascadeDelete] Firestore error on ${mat.id}:`, err)
+      );
+    }
+    notifyMaterialCountChange(-matchingMaterials.length);
+
+    // 3. Update local state
+    const remaining = get().materials.filter(
+      (m) => (m.subject || '').trim().toLowerCase() !== cleanSubj
+    );
+    set({
+      materials: remaining,
+      activeMaterial:
+        (get().activeMaterial?.subject || '').trim().toLowerCase() === cleanSubj
+          ? remaining[0] || null
+          : get().activeMaterial,
+    });
+
+    return matchingMaterials.length;
   },
 
   setActiveMaterial: (material: StudyMaterial | null) => set({ activeMaterial: material }),

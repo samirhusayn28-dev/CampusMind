@@ -25,6 +25,7 @@ import { isDueForReview, getReviewBadge } from '../services/spacedRepetition';
 import { StaggeredListItem } from '../theme/animations';
 import { spacing, borderRadius } from '../theme/spacing';
 import { typography } from '../theme/typography';
+import { getSafeTextPreview } from '../utils/textQuality';
 
 type LibraryTab = 'all' | 'folders' | 'reviews';
 
@@ -84,7 +85,7 @@ export const LibraryScreen: React.FC = () => {
     return materials.filter((item) => isDueForReview(item));
   }, [materials]);
 
-  const getBadgeDetails = (type: ContentType) => {
+  const getBadgeDetails = (type: ContentType, originalFileName?: string) => {
     switch (type) {
       case 'youtube':
         return { label: 'YouTube Video', variant: 'peach' as const };
@@ -93,8 +94,13 @@ export const LibraryScreen: React.FC = () => {
       case 'ocr':
         return { label: 'Handwritten Notes', variant: 'sky' as const };
       case 'pdf':
-      default:
+      default: {
+        const ext = originalFileName?.split('.').pop()?.toLowerCase();
+        if (ext === 'docx') return { label: 'Word Doc', variant: 'sage' as const };
+        if (ext === 'pptx') return { label: 'Slides', variant: 'sage' as const };
+        if (ext === 'xlsx' || ext === 'csv') return { label: 'Spreadsheet', variant: 'sage' as const };
         return { label: 'PDF Document', variant: 'sage' as const };
+      }
     }
   };
 
@@ -354,7 +360,7 @@ export const LibraryScreen: React.FC = () => {
             </Card>
           ) : (
             dueMaterials.map((item, idx) => {
-              const badge = getBadgeDetails(item.type);
+              const badge = getBadgeDetails(item.type, item.originalFileName);
               const reviewBadge = getReviewBadge(item);
 
               return (
@@ -378,7 +384,9 @@ export const LibraryScreen: React.FC = () => {
                     </Text>
 
                     <Text style={[styles.itemSnippet, { color: colors.textSecondary }]} numberOfLines={2}>
-                      {item.summary?.overview || item.extractedText.substring(0, 160)}
+                      {item.summary?.overview
+                        ? getSafeTextPreview(item.summary.overview, 160)
+                        : getSafeTextPreview(item.extractedText, 160)}
                     </Text>
 
                     {/* Review Stats */}
@@ -461,7 +469,7 @@ export const LibraryScreen: React.FC = () => {
             </Card>
           ) : (
             filteredMaterials.map((item, idx) => {
-              const badge = getBadgeDetails(item.type);
+              const badge = getBadgeDetails(item.type, item.originalFileName);
               const reviewBadge = getReviewBadge(item);
               const estReadMinutes = Math.max(1, Math.round(item.wordCount / 180));
 
@@ -496,7 +504,9 @@ export const LibraryScreen: React.FC = () => {
                         style={[styles.itemSnippet, { color: colors.textSecondary }]}
                         numberOfLines={2}
                       >
-                        {item.summary?.overview || item.extractedText.substring(0, 160)}
+                        {item.summary?.overview
+                          ? getSafeTextPreview(item.summary.overview, 160)
+                          : getSafeTextPreview(item.extractedText, 160)}
                       </Text>
 
                       <View style={styles.cardFooter}>

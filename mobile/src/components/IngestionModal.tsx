@@ -11,6 +11,7 @@ import {
   Platform,
   Keyboard,
   Image,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -38,6 +39,7 @@ import { extractOcrText, getSignedPdfUploadUrl } from '../services/api';
 import { AnimatedPressable } from '../theme/animations';
 import { spacing, borderRadius, shadows } from '../theme/spacing';
 import { typography } from '../theme/typography';
+import { isTextReadable } from '../utils/textQuality';
 
 interface IngestionModalProps {
   visible: boolean;
@@ -45,7 +47,8 @@ interface IngestionModalProps {
   initialType?: ContentType;
 }
 
-const DEFAULT_SUBJECTS = ['Computer Science', 'Biology', 'History', 'Physics', 'Psychology', 'General'];
+// Legacy default subjects preserved for backwards compatibility with existing user libraries
+const LEGACY_DEFAULT_SUBJECTS = ['Computer Science', 'Biology', 'History', 'Physics', 'Psychology', 'General'];
 
 export const IngestionModal: React.FC<IngestionModalProps> = ({
   visible,
@@ -64,20 +67,22 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
     ingestAudio,
     saveExtractedMaterial,
     generateSummaryForMaterial,
+    cascadeDeleteSubject,
   } = useContentStore();
+  const materials = useContentStore((state) => state.materials);
 
   const [activeTab, setActiveTab] = useState<ContentType>(initialType);
-  const [selectedSubject, setSelectedSubject] = useState('Computer Science');
   const [pdfUploadProgress, setPdfUploadProgress] = useState<number | null>(null);
 
-  // Custom Subject State & Deduplicated Dynamic List
+  // Custom Subject State & Dynamic Subject List starting empty for new users
   const [isAddingCustomSubject, setIsAddingCustomSubject] = useState(false);
   const [customSubjectText, setCustomSubjectText] = useState('');
 
   const allSubjects = React.useMemo(() => {
-    const list: string[] = [...DEFAULT_SUBJECTS];
+    const list: string[] = [];
     const customList = user?.customSubjects || [];
 
+    // 1. User's custom subjects
     for (const c of customList) {
       const clean = c.trim();
       if (!clean) continue;
@@ -86,8 +91,38 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
         list.push(clean);
       }
     }
+
+    // 2. Existing materials' subjects (preserves older courses for existing accounts)
+    for (const m of materials) {
+      const clean = (m.subject || '').trim();
+      if (!clean) continue;
+      const exists = list.some((item) => item.toLowerCase() === clean.toLowerCase());
+      if (!exists) {
+        list.push(clean);
+      }
+    }
+
     return list;
-  }, [user?.customSubjects]);
+  }, [user?.customSubjects, materials]);
+
+  const [selectedSubject, setSelectedSubject] = useState<string>(() => {
+    const custom = user?.customSubjects || [];
+    if (custom.length > 0) return custom[0];
+    const existing = useContentStore.getState().materials;
+    if (existing.length > 0 && existing[0]?.subject) return existing[0].subject;
+    return '';
+  });
+
+  useEffect(() => {
+    if (allSubjects.length > 0) {
+      const exists = allSubjects.some((s) => s.toLowerCase() === selectedSubject.toLowerCase());
+      if (!exists) {
+        setSelectedSubject(allSubjects[0]);
+      }
+    } else {
+      setSelectedSubject('');
+    }
+  }, [allSubjects]);
 
   // YouTube State
   const [youtubeUrl, setYoutubeUrl] = useState('');
@@ -180,26 +215,49 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
     setCustomSubjectText('');
   };
 
-  const handleRemoveCustomSubject = async (subj: string) => {
-    const materials = useContentStore.getState().materials;
-    const assignedMaterials = materials.filter(
-      (m) => m.subject?.trim().toLowerCase() === subj.trim().toLowerCase()
+  const handleLongPressSubject = (subj: string) => {
+    const isLegacyDefault = LEGACY_DEFAULT_SUBJECTS.some(
+      (s) => s.toLowerCase() === subj.trim().toLowerCase()
     );
-    if (assignedMaterials.length > 0) {
-      triggerHaptic('errorNotification');
-      showThemedAlert(
-        'Subject in Use',
-        `Cannot remove "${subj}" because ${assignedMaterials.length} study item(s) are assigned to it. Please reassign or delete those materials first.`
-      );
+    if (isLegacyDefault) {
+      return; // Built-in / legacy default subjects are protected from deletion
+    }
+
+    const isCustom = (user?.customSubjects || []).some(
+      (s) => s.toLowerCase() === subj.trim().toLowerCase()
+    );
+    if (!isCustom) {
       return;
     }
 
-    triggerHaptic('mediumImpact');
-    await removeCustomSubject(subj);
-    if (selectedSubject.trim().toLowerCase() === subj.trim().toLowerCase()) {
-      setSelectedSubject('General');
-    }
-    showThemedToast('info', `Removed "${subj}" from custom subjects.`);
+    triggerHaptic('warningNotification');
+    Alert.alert(
+      `Delete "${subj}"?`,
+      `This will permanently delete this subject and ALL study material assigned to it. This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              triggerHaptic('heavyImpact');
+              const userId = user?.uid || 'guest_user';
+              await cascadeDeleteSubject(subj, userId);
+              await removeCustomSubject(subj);
+              if (selectedSubject.trim().toLowerCase() === subj.trim().toLowerCase()) {
+                const nextSubj = allSubjects.find((s) => s.toLowerCase() !== subj.toLowerCase()) || '';
+                setSelectedSubject(nextSubj);
+              }
+              showThemedToast('info', `Deleted "${subj}" and all assigned materials.`);
+            } catch (err: any) {
+              console.error('[Cascade Delete Error]:', err);
+              showThemedAlert('Error', 'Could not complete deletion. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const renderSubjectSelector = (disabled: boolean = false) => (
@@ -212,7 +270,6 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
       >
         {allSubjects.map((subj) => {
           const isSel = selectedSubject === subj;
-          const isCustom = !DEFAULT_SUBJECTS.includes(subj);
           return (
             <TouchableOpacity
               key={subj}
@@ -225,6 +282,8 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
                 setSelectedSubject(subj);
                 setIsAddingCustomSubject(false);
               }}
+              onLongPress={() => handleLongPressSubject(subj)}
+              delayLongPress={450}
               disabled={disabled}
             >
               <Text
@@ -235,22 +294,6 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
               >
                 {subj}
               </Text>
-              {isCustom && !disabled && (
-                <TouchableOpacity
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  onPress={(e) => {
-                    e.stopPropagation?.();
-                    handleRemoveCustomSubject(subj);
-                  }}
-                  style={styles.removeSubjectBtn}
-                >
-                  <Ionicons
-                    name="close-circle"
-                    size={14}
-                    color={isSel ? colors.onPrimary : colors.textTertiary}
-                  />
-                </TouchableOpacity>
-              )}
             </TouchableOpacity>
           );
         })}
@@ -338,14 +381,33 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
     setIsReviewingOcr(false);
   };
 
-  const MAX_PDF_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
+  const MAX_DOCUMENT_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
 
-  // Handle PDF Picking with Direct Supabase Storage Upload via Signed URL
+  // Handle Multi-Format Document Picking with Direct Supabase Storage Upload via Signed URL
   const handlePickPdf = async () => {
+    if (!selectedSubject || selectedSubject.trim().length === 0) {
+      triggerHaptic('errorNotification');
+      showThemedAlert(
+        'Subject Required',
+        'Please tap "+ Other" to add or assign a course/subject first.'
+      );
+      return;
+    }
+
     try {
       triggerHaptic('lightImpact');
       const res = await DocumentPicker.getDocumentAsync({
-        type: 'application/pdf',
+        type: [
+          'application/pdf',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'text/csv',
+          'application/msword',
+          'application/vnd.ms-excel',
+          'application/vnd.ms-powerpoint',
+          '*/*',
+        ],
         copyToCacheDirectory: true,
       });
 
@@ -353,47 +415,64 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
 
       const file = res.assets[0];
 
-      // Bug 2: Client-side validation for authentic PDF format (extension + MIME + magic bytes %PDF-)
+      // Format validation for supported document types: PDF, DOCX, PPTX, XLSX, CSV
       const fileNameLower = (file.name || '').toLowerCase();
-      if (!fileNameLower.endsWith('.pdf') || (file.mimeType && file.mimeType !== 'application/pdf')) {
+      const isPdf = fileNameLower.endsWith('.pdf');
+      const isDocx = fileNameLower.endsWith('.docx');
+      const isPptx = fileNameLower.endsWith('.pptx');
+      const isXlsx = fileNameLower.endsWith('.xlsx');
+      const isCsv = fileNameLower.endsWith('.csv');
+
+      if (!isPdf && !isDocx && !isPptx && !isXlsx && !isCsv) {
         triggerHaptic('errorNotification');
         showThemedAlert(
-          'Invalid File Format',
-          "This doesn't look like a valid PDF. Please upload a real PDF file."
+          'Unsupported Document Format',
+          'Please choose a supported document format: PDF (.pdf), Word (.docx), PowerPoint (.pptx), Excel (.xlsx), or CSV (.csv).'
         );
         return;
       }
 
-      try {
-        const headerB64 = await FileSystem.readAsStringAsync(file.uri, {
-          length: 1024,
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        const headerStr = atob(headerB64.slice(0, 512));
-        if (!headerStr.includes('%PDF-')) {
-          triggerHaptic('errorNotification');
-          showThemedAlert(
-            'Invalid PDF File',
-            "This doesn't look like a valid PDF. Please upload a real PDF file."
-          );
-          return;
+      // If PDF, verify authentic magic bytes
+      if (isPdf) {
+        try {
+          const headerB64 = await FileSystem.readAsStringAsync(file.uri, {
+            length: 1024,
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          const headerStr = atob(headerB64.slice(0, 512));
+          if (!headerStr.includes('%PDF-')) {
+            triggerHaptic('errorNotification');
+            showThemedAlert(
+              'Invalid PDF File',
+              "This doesn't look like a valid PDF. Please upload a real PDF file."
+            );
+            return;
+          }
+        } catch (checkErr) {
+          console.warn('[PDF Validation] Could not inspect magic bytes:', checkErr);
         }
-      } catch (checkErr) {
-        console.warn('[PDF Validation] Could not inspect magic bytes:', checkErr);
       }
 
-      // Client-side 20MB check
-      if (file.size && file.size > MAX_PDF_SIZE_BYTES) {
+      // Client-side 25MB check
+      if (file.size && file.size > MAX_DOCUMENT_SIZE_BYTES) {
         triggerHaptic('errorNotification');
         const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
         showThemedAlert(
           'File Too Large',
-          `"${file.name}" is ${sizeMb}MB, which exceeds the 20MB limit. Please choose a smaller PDF or split the document.`
+          `"${file.name}" is ${sizeMb}MB, which exceeds the 25MB limit. Please choose a smaller document.`
         );
         return;
       }
 
       setPdfUploadProgress(0);
+
+      // Determine MIME type
+      let mimeType = file.mimeType || 'application/octet-stream';
+      if (isPdf) mimeType = 'application/pdf';
+      else if (isDocx) mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      else if (isPptx) mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+      else if (isXlsx) mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      else if (isCsv) mimeType = 'text/csv';
 
       // 1. Request signed upload URL from backend
       const { signedUrl, storagePath } = await getSignedPdfUploadUrl(file.name);
@@ -414,14 +493,14 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
           byteNumbers[i] = byteCharacters.charCodeAt(i);
         }
         const byteArray = new Uint8Array(byteNumbers);
-        blob = new Blob([byteArray], { type: 'application/pdf' });
+        blob = new Blob([byteArray], { type: mimeType });
       }
 
       // 3. Direct upload to Supabase signed URL using XMLHttpRequest with live clamped progress tracking
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('PUT', signedUrl);
-        xhr.setRequestHeader('Content-Type', 'application/pdf');
+        xhr.setRequestHeader('Content-Type', mimeType);
 
         if (xhr.upload) {
           xhr.upload.onprogress = (event) => {
@@ -466,12 +545,18 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
     } catch (err: any) {
       setPdfUploadProgress(null);
       triggerHaptic('errorNotification');
-      showThemedAlert('PDF Upload Error', err.message || 'Could not process PDF document.');
+      showThemedAlert('Document Upload Error', err.message || 'Could not process document.');
     }
   };
 
   // Handle YouTube Ingestion
   const handleIngestYouTube = async () => {
+    if (!selectedSubject || selectedSubject.trim().length === 0) {
+      triggerHaptic('errorNotification');
+      showThemedAlert('Subject Required', 'Please tap "+ Other" to add or assign a course/subject first.');
+      return;
+    }
+
     if (!youtubeUrl.trim()) {
       showThemedAlert('Enter URL', 'Please paste a valid YouTube video URL.');
       return;
@@ -493,6 +578,12 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
 
   // Audio Recording Handlers
   const startRecording = async () => {
+    if (!selectedSubject || selectedSubject.trim().length === 0) {
+      triggerHaptic('errorNotification');
+      showThemedAlert('Subject Required', 'Please tap "+ Other" to add or assign a course/subject first.');
+      return;
+    }
+
     try {
       triggerHaptic('mediumImpact');
       const permission = await requestRecordingPermissionsAsync();
@@ -555,6 +646,12 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
 
   // Multi-Photo / OCR Handlers (supports 1 to 10 images)
   const handlePickOcrPhotos = async (useCamera: boolean) => {
+    if (!selectedSubject || selectedSubject.trim().length === 0) {
+      triggerHaptic('errorNotification');
+      showThemedAlert('Subject Required', 'Please tap "+ Other" to add or assign a course/subject first.');
+      return;
+    }
+
     try {
       if (selectedOcrImages.length >= 10) {
         showThemedAlert('Maximum Reached', 'You can select up to 10 pages per submission.');
@@ -709,11 +806,17 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
 
   // Confirm Reviewed OCR Text & Save / Summarize
   const handleConfirmOcr = async (shouldSummarize: boolean = true) => {
+    if (!selectedSubject || selectedSubject.trim().length === 0) {
+      triggerHaptic('errorNotification');
+      showThemedAlert('Subject Required', 'Please assign a course or subject before saving.');
+      return;
+    }
+
     const trimmed = ocrText.trim();
-    if (!trimmed || trimmed.length < 10) {
+    if (!trimmed || trimmed.length < 10 || !isTextReadable(trimmed).readable) {
       showThemedAlert(
         'No Readable Text',
-        'No readable text found in this photo. Please retake with better lighting and focus.'
+        "We couldn't read this note's text properly. Try better lighting and clearer handwriting."
       );
       return;
     }
@@ -921,7 +1024,7 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
               <View style={[styles.tabBar, { backgroundColor: colors.surfaceSubtle }]}>
                 {(
                   [
-                    { type: 'pdf', label: 'PDF', icon: 'document-text' },
+                    { type: 'pdf', label: 'Document', icon: 'document-text' },
                     { type: 'youtube', label: 'YouTube', icon: 'logo-youtube' },
                     { type: 'audio', label: 'Audio', icon: 'mic' },
                     { type: 'ocr', label: 'Notes OCR', icon: 'camera' },
@@ -968,13 +1071,13 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
                       <Ionicons name="document-text" size={30} color={colors.primary} />
                     </View>
                     <Text style={[styles.contentCardTitle, { color: colors.textPrimary }]}>
-                      Upload Lecture PDF
+                      Upload Study Document
                     </Text>
                     <Text style={[styles.contentCardDesc, { color: colors.textSecondary }]}>
-                      Upload lecture slide decks, syllabus sheets, or textbook chapters.
+                      Upload PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), or CSV (.csv) files.
                     </Text>
                     <Text style={[styles.fileLimitHint, { color: colors.textTertiary }]}>
-                      Max file size: 20 MB. If your PDF is larger, please compress it before uploading.
+                      Max file size: 25 MB. Supports PDF, DOCX, PPTX, XLSX, and CSV.
                     </Text>
 
                     {pdfUploadProgress !== null ? (
@@ -1008,7 +1111,7 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
                       >
                         <Ionicons name="folder-open-outline" size={18} color={colors.onPrimary} />
                         <Text style={[styles.primaryActionText, { color: colors.onPrimary }]}>
-                          Choose PDF from Files
+                          Choose Document from Files
                         </Text>
                       </AnimatedPressable>
                     )}

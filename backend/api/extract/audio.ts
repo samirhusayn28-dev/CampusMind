@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { GROQ_MODELS } from '../_utils/ai.js';
+import { isTextReadable } from '../_utils/quality.js';
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY || 'gsk_mock_preview_key',
@@ -45,6 +46,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!text || text.length === 0) {
         return res.status(400).json({
           error: 'No spoken words were detected in this audio recording. Please speak clearly into the microphone and try again.',
+        });
+      }
+
+      const quality = isTextReadable(text);
+      if (!quality.readable) {
+        return res.status(422).json({
+          error: "We couldn't clearly transcribe this audio recording. Please speak closer to the microphone and try again.",
+          details: quality.reason,
         });
       }
 

@@ -84,8 +84,14 @@ ADAPTIVE DIFFICULTY & VOCABULARY LEVEL:
 ${difficultyInstruction}
 
 CRITICAL INSTRUCTION:
-Generate the summary, key takeaways, and section headings based ONLY and STRICTLY on the facts, concepts, and details provided in the user's raw extracted text.
+Generate the summary, key takeaways, section headings, and optional tables/charts based ONLY and STRICTLY on the facts, concepts, and details provided in the user's raw extracted text.
 Do NOT introduce external subjects, unmentioned topics, or fabricated information.
+
+OPTIONAL STRUCTURED TABLES & CHARTS:
+If and ONLY IF the provided text clearly contains tabular data (such as spreadsheet tables, markdown tables, matrix data, schedules, or comparisons) or comparable numeric data:
+- "tables": Include structured tables with "title" (string), "columns" (string[]), and "rows" (string[][]).
+- "charts": Include visualization objects with "type" ("bar" | "line" | "pie"), "title" (string), "labels" (string[]), and "series" ([{ "name": string, "data": number[] }]). Values in "data" MUST be numbers.
+- If NO clear tabular or numeric data exists in the source text, set "tables" and "charts" to empty arrays []. NEVER invent numbers or fabricate data.
 
 Respond ONLY with valid JSON matching this exact structure:
 {
@@ -96,8 +102,7 @@ Respond ONLY with valid JSON matching this exact structure:
     "Key takeaway 2",
     "Key takeaway 3",
     "Key takeaway 4",
-    "Key takeaway 5",
-    "Key takeaway 6"
+    "Key takeaway 5"
   ],
   "headings": [
     {
@@ -115,7 +120,30 @@ Respond ONLY with valid JSON matching this exact structure:
       ]
     }
   ],
-  "fullSummary": "Comprehensive multi-paragraph study guide written in an approachable, warm educational tone."
+  "fullSummary": "Comprehensive multi-paragraph study guide written in an approachable, warm educational tone.",
+  "tables": [
+    {
+      "title": "Table Title",
+      "columns": ["Col 1", "Col 2"],
+      "rows": [
+        ["Val 1", "Val 2"],
+        ["Val 3", "Val 4"]
+      ]
+    }
+  ],
+  "charts": [
+    {
+      "type": "bar",
+      "title": "Chart Title",
+      "labels": ["Item A", "Item B"],
+      "series": [
+        {
+          "name": "Score",
+          "data": [90, 85]
+        }
+      ]
+    }
+  ]
 }`;
 
     const userPrompt = `Material Title: ${title || 'Study Material'}
@@ -125,7 +153,7 @@ Raw Extracted Text:
 ${processedText}
 """
 
-Please produce a comprehensive 5-10 key-points summary, auto-headings, and study guide in the specified JSON format strictly based on the text above.`;
+Please produce a comprehensive 5-10 key-points summary, auto-headings, study guide, and optional structured tables/charts (if tabular/numeric data is present in the text) in the specified JSON format strictly based on the text above.`;
 
     let parsedJson: any = null;
     let lastError: any = null;
@@ -183,6 +211,51 @@ Please produce a comprehensive 5-10 key-points summary, auto-headings, and study
         ],
         fullSummary: paragraphs.slice(0, 5).join('\n\n') || text.slice(0, 1500),
       };
+    }
+    // Sanitize and validate optional tables
+    if (Array.isArray(parsedJson?.tables)) {
+      parsedJson.tables = parsedJson.tables
+        .filter((t: any) => t && Array.isArray(t.columns) && t.columns.length > 0 && Array.isArray(t.rows) && t.rows.length > 0)
+        .map((t: any) => ({
+          title: typeof t.title === 'string' && t.title.trim() ? t.title.trim() : 'Data Table',
+          columns: t.columns.map((c: any) => String(c ?? '').trim()),
+          rows: t.rows.map((row: any) =>
+            Array.isArray(row)
+              ? row.map((cell: any) => String(cell ?? '').trim())
+              : [String(row ?? '').trim()]
+          ),
+        }));
+      if (parsedJson.tables.length === 0) delete parsedJson.tables;
+    } else {
+      delete parsedJson.tables;
+    }
+
+    // Sanitize and validate optional charts
+    if (Array.isArray(parsedJson?.charts)) {
+      parsedJson.charts = parsedJson.charts
+        .filter((c: any) => {
+          if (!c || !['bar', 'line', 'pie'].includes(c.type)) return false;
+          if (!Array.isArray(c.labels) || c.labels.length === 0) return false;
+          if (!Array.isArray(c.series) || c.series.length === 0) return false;
+          return c.series.some((s: any) => Array.isArray(s.data) && s.data.length > 0);
+        })
+        .map((c: any) => ({
+          type: c.type,
+          title: typeof c.title === 'string' && c.title.trim() ? c.title.trim() : 'Data Chart',
+          labels: c.labels.map((l: any) => String(l ?? '').trim()),
+          series: c.series.map((s: any) => ({
+            name: typeof s.name === 'string' && s.name.trim() ? s.name.trim() : 'Value',
+            data: Array.isArray(s.data)
+              ? s.data.map((d: any) => {
+                  const num = Number(d);
+                  return isNaN(num) ? 0 : num;
+                })
+              : [],
+          })),
+        }));
+      if (parsedJson.charts.length === 0) delete parsedJson.charts;
+    } else {
+      delete parsedJson.charts;
     }
 
     return res.status(200).json({

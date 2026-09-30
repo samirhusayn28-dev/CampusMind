@@ -21,8 +21,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { fileName } = req.body || {};
     const rawName = typeof fileName === 'string' && fileName.trim() ? fileName.trim() : 'document.pdf';
 
+    // Validate supported document extensions (pdf, docx, pptx, xlsx, csv)
+    const supportedExtRegex = /\.(pdf|docx|pptx|xlsx|csv)$/i;
+    let finalFileName = rawName;
+    if (!supportedExtRegex.test(finalFileName)) {
+      finalFileName = `${finalFileName}.pdf`;
+    }
+
     // Sanitize file name to avoid path traversal and illegal characters
-    const sanitizedFileName = rawName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const sanitizedFileName = finalFileName.replace(/[^a-zA-Z0-9._-]/g, '_');
     const timestamp = Date.now();
     const relativePath = `${authUser.uid}/${timestamp}_${sanitizedFileName}`;
     const storagePath = `pdfs/${relativePath}`;

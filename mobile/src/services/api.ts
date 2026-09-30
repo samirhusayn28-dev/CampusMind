@@ -1,6 +1,7 @@
 import NetInfo from '@react-native-community/netinfo';
-import { ConceptMapData } from '../types/content';
+import { ConceptMapData, StructuredTable, StructuredChart } from '../types/content';
 import { auth } from './firebase';
+import { isTextReadable } from '../utils/textQuality';
 
 /**
  * CampusMind API Client
@@ -251,34 +252,69 @@ export async function getSignedPdfUploadUrl(fileName: string): Promise<{
   );
 }
 
-// 1. PDF Extraction via backend
-export async function extractPdfText(
+// 1. Document Extraction (PDF, Word .docx, PowerPoint .pptx, Excel .xlsx, CSV .csv) via backend
+export async function extractDocumentText(
   storagePath: string,
   fileName: string
-): Promise<ExtractionResult> {
+): Promise<ExtractionResult & { format?: string }> {
   const data = await requestBackend<any>(
-    '/api/extract/pdf',
+    '/api/extract/document',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ storagePath, fileName }),
     },
-    'extract PDF text'
+    'extract document text'
   );
 
   const text = (data.text || '').trim();
-  if (!text || text.length < 20) {
+  const quality = isTextReadable(text);
+  if (!quality.readable) {
     throw new Error(
-      `No readable text could be extracted from "${fileName}". If it contains scanned images, please take photos and use Camera Scan.`
+      "We couldn't read this document's text properly. Try re-exporting it, or use Notes OCR instead."
     );
   }
+
+  const cleanTitle = fileName.replace(/\.(pdf|docx|pptx|xlsx|csv)$/i, '');
 
   return {
     text,
     wordCount: data.wordCount || text.split(/\s+/).filter(Boolean).length,
-    title: fileName.replace(/\.pdf$/i, ''),
+    title: cleanTitle,
     numPages: data.numPages,
+    format: data.format,
   };
+}
+
+export const extractPdfText = extractDocumentText;
+
+export interface ExportEditedDocumentResponse {
+  success: boolean;
+  storagePath: string;
+  fileName: string;
+  title: string;
+  subject: string;
+  extractedText: string;
+  wordCount: number;
+  format: string;
+  createdAt: string;
+}
+
+export async function exportEditedDocument(params: {
+  title: string;
+  subject: string;
+  text: string;
+  userId: string;
+}): Promise<ExportEditedDocumentResponse> {
+  return await requestBackend<ExportEditedDocumentResponse>(
+    '/api/document/export-docx',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    },
+    'export and ingest edited document'
+  );
 }
 
 export function extractYouTubeVideoId(url: string): string | null {
@@ -439,7 +475,7 @@ export async function extractYouTubeTranscript(url: string): Promise<ExtractionR
   // 1. Try direct on-device extraction first (bypasses datacenter scraping blocks)
   try {
     const onDeviceResult = await extractYouTubeTranscriptOnDevice(videoId);
-    if (onDeviceResult && onDeviceResult.text.length >= 20) {
+    if (onDeviceResult && onDeviceResult.text.length >= 20 && isTextReadable(onDeviceResult.text).readable) {
       return onDeviceResult;
     }
   } catch (err) {
@@ -459,9 +495,10 @@ export async function extractYouTubeTranscript(url: string): Promise<ExtractionR
     );
 
     const text = (data.text || '').trim();
-    if (!text || text.length < 20) {
+    const quality = isTextReadable(text);
+    if (!quality.readable) {
       throw new Error(
-        'This video does not have closed captions or subtitles enabled by its creator. Please try a video with captions, or paste your lecture notes directly.'
+        'This video does not have readable closed captions or subtitles enabled by its creator. Please try a video with captions, or paste your lecture notes directly.'
       );
     }
 
@@ -495,8 +532,9 @@ export async function transcribeAudio(
   );
 
   const text = (data.text || '').trim();
-  if (!text || text.length < 10) {
-    throw new Error('No speech was detected in this recording. Please try recording again closer to the speaker.');
+  const quality = isTextReadable(text);
+  if (!quality.readable) {
+    throw new Error('No clear speech was detected in this recording. Please try recording again closer to the speaker.');
   }
 
   return {
@@ -520,7 +558,8 @@ export async function extractOcrText(imageBase64: string): Promise<ExtractionRes
   );
 
   const text = (data.text || '').trim();
-  if (!text || text.length < 10) {
+  const quality = isTextReadable(text);
+  if (!quality.readable) {
     throw new Error("Couldn't read this photo, try better lighting and clearer handwriting.");
   }
 
@@ -530,6 +569,24 @@ export async function extractOcrText(imageBase64: string): Promise<ExtractionRes
     title: 'Handwritten Study Notes',
     detectedLanguages: data.detectedLanguages,
   };
+}
+
+// Delete files from Supabase Storage via backend
+export async function deleteSupabaseStorageFiles(paths: string[]): Promise<void> {
+  if (!paths || paths.length === 0) return;
+  try {
+    await requestBackend<any>(
+      '/api/storage/delete',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paths }),
+      },
+      'delete files from storage'
+    );
+  } catch (err) {
+    console.warn('[Supabase Storage Deletion Warning]:', err);
+  }
 }
 
 function sampleTextForAi(text: string, maxLen: number = 24000): string {
@@ -549,6 +606,8 @@ export interface SummarizeResponse {
   keyPoints: string[];
   headings: { title: string; points: string[] }[];
   fullSummary: string;
+  tables?: StructuredTable[];
+  charts?: StructuredChart[];
 }
 
 export async function summarizeContent(

@@ -12,6 +12,24 @@ export interface TranslatedContent {
   fullSummary: string;
 }
 
+export interface StructuredTable {
+  title?: string;
+  columns: string[];
+  rows: string[][];
+}
+
+export interface StructuredChartSeries {
+  name: string;
+  data: number[];
+}
+
+export interface StructuredChart {
+  type: 'bar' | 'line' | 'pie';
+  title?: string;
+  labels: string[];
+  series: StructuredChartSeries[];
+}
+
 export interface StudySummary {
   overview?: string;
   keyPoints: string[];
@@ -20,6 +38,8 @@ export interface StudySummary {
     points: string[];
   }[];
   fullSummary: string;
+  tables?: StructuredTable[];
+  charts?: StructuredChart[];
   translations?: {
     romanUrdu?: TranslatedContent;
     urdu?: TranslatedContent;
@@ -64,6 +84,7 @@ export interface StudyMaterial {
   conceptMap?: ConceptMapData;
   subject: string;
   sourceUrl?: string;
+  storagePath?: string;
   originalFileName?: string;
   audioDurationSeconds?: number;
   createdAt: string;

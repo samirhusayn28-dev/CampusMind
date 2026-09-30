@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import vision from '@google-cloud/vision';
 import Groq from 'groq-sdk';
 import { GROQ_MODELS, stripReasoning } from '../_utils/ai.js';
+import { isTextReadable } from '../_utils/quality.js';
 
 // Optional Vision Client for Service Account credentials
 let visionClient: any = null;
@@ -136,12 +137,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // Step 4: Strict validation — NEVER return empty or fake text
+    // Step 4: Strict validation — NEVER return empty or garbled text
     if (!extractedText || extractedText.trim().length === 0) {
       return res.status(400).json({
         error: "Couldn't read this photo, try better lighting and clearer handwriting.",
         text: '',
         wordCount: 0,
+      });
+    }
+
+    const quality = isTextReadable(extractedText);
+    if (!quality.readable) {
+      return res.status(422).json({
+        error: "Couldn't clearly read this photo, try better lighting and clearer handwriting.",
+        details: quality.reason,
       });
     }
 

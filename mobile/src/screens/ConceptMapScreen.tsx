@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
-import Svg, { Line, Path, Rect, Text as SvgText, G, Circle } from 'react-native-svg';
+import Svg, { Line, Path, Rect, Text as SvgText, G, Circle, Polygon } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeStore } from '../store/useThemeStore';
@@ -38,8 +38,12 @@ interface NodePosition {
   height: number;
 }
 
-const CANVAS_WIDTH = 750;
-const CANVAS_HEIGHT = 650;
+interface TierLayout {
+  tiers: ConceptNode[][];
+  positions: Record<string, NodePosition>;
+  canvasWidth: number;
+  canvasHeight: number;
+}
 
 export const ConceptMapScreen: React.FC<ConceptMapScreenProps> = (props) => {
   const navigation = props.navigation;
@@ -67,6 +71,7 @@ export const ConceptMapScreen: React.FC<ConceptMapScreenProps> = (props) => {
   const [conceptMap, setConceptMap] = useState<ConceptMapData | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isLocalLoading, setIsLocalLoading] = useState(false);
+  const [zoomScale, setZoomScale] = useState(1.0);
 
   useEffect(() => {
     loadOrGenerateMap();
@@ -139,51 +144,79 @@ export const ConceptMapScreen: React.FC<ConceptMapScreenProps> = (props) => {
     }
   };
 
-  // Compute node layouts deterministically across tiers
-  const nodePositions = useMemo(() => {
-    const positions: Record<string, NodePosition> = {};
-    if (!conceptMap || conceptMap.nodes.length === 0) return positions;
+  // Compute dynamic multi-tier layout avoiding node overlaps
+  const layoutData = useMemo<TierLayout>(() => {
+    if (!conceptMap || conceptMap.nodes.length === 0) {
+      return { tiers: [], positions: {}, canvasWidth: 900, canvasHeight: 650 };
+    }
 
     const nodes = conceptMap.nodes;
-    const root = nodes.find((n) => n.category === 'root') || nodes[0];
-    const nonRoot = nodes.filter((n) => n.id !== root.id);
+    const rootNode = nodes.find((n) => n.category === 'root') || nodes[0];
+    const remaining = nodes.filter((n) => n.id !== rootNode.id);
 
-    // Root node at top center
-    positions[root.id] = {
-      x: CANVAS_WIDTH / 2,
-      y: 70,
-      width: 170,
-      height: 54,
+    // Group remaining nodes by hierarchy
+    const coreGroup: ConceptNode[] = [];
+    const mechanismGroup: ConceptNode[] = [];
+    const applicationGroup: ConceptNode[] = [];
+    const otherGroup: ConceptNode[] = [];
+
+    remaining.forEach((node) => {
+      if (node.category === 'core') coreGroup.push(node);
+      else if (node.category === 'mechanism') mechanismGroup.push(node);
+      else if (node.category === 'application' || node.category === 'example') applicationGroup.push(node);
+      else otherGroup.push(node);
+    });
+
+    // Build hierarchical tiers (limit each tier row to max 3-4 nodes to prevent crowding)
+    const tiers: ConceptNode[][] = [[rootNode]];
+
+    const addGroupToTiers = (list: ConceptNode[]) => {
+      if (list.length === 0) return;
+      const chunkSize = list.length <= 4 ? list.length : 3;
+      for (let i = 0; i < list.length; i += chunkSize) {
+        tiers.push(list.slice(i, i + chunkSize));
+      }
     };
 
-    // Divide remaining nodes into 2 or 3 tiers
-    const tier1Count = Math.min(3, Math.ceil(nonRoot.length / 2));
-    const tier1 = nonRoot.slice(0, tier1Count);
-    const tier2 = nonRoot.slice(tier1Count);
+    addGroupToTiers(coreGroup);
+    addGroupToTiers(mechanismGroup);
+    addGroupToTiers(applicationGroup);
+    addGroupToTiers(otherGroup);
 
-    // Tier 1 coordinates
-    tier1.forEach((node, idx) => {
-      const step = CANVAS_WIDTH / (tier1.length + 1);
-      positions[node.id] = {
-        x: step * (idx + 1),
-        y: 220,
-        width: 144,
-        height: 50,
-      };
+    if (tiers.length === 1 && remaining.length > 0) {
+      for (let i = 0; i < remaining.length; i += 3) {
+        tiers.push(remaining.slice(i, i + 3));
+      }
+    }
+
+    // Dynamic dimensions ensuring >= 210px node separation (node width 156px)
+    const maxNodesInAnyTier = Math.max(...tiers.map((t) => t.length), 1);
+    const minHorizontalSlot = 220;
+    const canvasWidth = Math.max(900, (maxNodesInAnyTier + 1) * minHorizontalSlot);
+    const verticalTierSpacing = 150;
+    const canvasHeight = Math.max(700, 110 + tiers.length * verticalTierSpacing);
+
+    const positions: Record<string, NodePosition> = {};
+    const DEFAULT_NODE_WIDTH = 156;
+    const DEFAULT_NODE_HEIGHT = 50;
+
+    tiers.forEach((tierNodes, tierIdx) => {
+      const y = 90 + tierIdx * verticalTierSpacing;
+      const step = canvasWidth / (tierNodes.length + 1);
+
+      tierNodes.forEach((node, nodeIdx) => {
+        const x = step * (nodeIdx + 1);
+        const isRoot = node.id === rootNode.id;
+        positions[node.id] = {
+          x,
+          y,
+          width: isRoot ? 176 : DEFAULT_NODE_WIDTH,
+          height: isRoot ? 54 : DEFAULT_NODE_HEIGHT,
+        };
+      });
     });
 
-    // Tier 2 coordinates
-    tier2.forEach((node, idx) => {
-      const step = CANVAS_WIDTH / (tier2.length + 1);
-      positions[node.id] = {
-        x: step * (idx + 1),
-        y: 380,
-        width: 144,
-        height: 50,
-      };
-    });
-
-    return positions;
+    return { tiers, positions, canvasWidth, canvasHeight };
   }, [conceptMap]);
 
   const selectedNode = conceptMap?.nodes.find((n) => n.id === selectedNodeId);
@@ -203,6 +236,18 @@ export const ConceptMapScreen: React.FC<ConceptMapScreenProps> = (props) => {
     if (onNavigateToChat) {
       onNavigateToChat();
     }
+  };
+
+  const handleZoomIn = () => {
+    setZoomScale((z) => Math.min(1.8, Math.round((z + 0.2) * 10) / 10));
+  };
+
+  const handleZoomOut = () => {
+    setZoomScale((z) => Math.max(0.6, Math.round((z - 0.2) * 10) / 10));
+  };
+
+  const handleResetZoom = () => {
+    setZoomScale(1.0);
   };
 
   // 1. Loading State
@@ -333,60 +378,111 @@ export const ConceptMapScreen: React.FC<ConceptMapScreenProps> = (props) => {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.canvasVerticalScroll}
           >
-            <View style={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }}>
-              <Svg width={CANVAS_WIDTH} height={CANVAS_HEIGHT} style={StyleSheet.absoluteFill}>
-                {/* 1. Render connecting relationship edges */}
+            <View
+              style={{
+                width: layoutData.canvasWidth * zoomScale,
+                height: layoutData.canvasHeight * zoomScale,
+              }}
+            >
+              <Svg
+                width={layoutData.canvasWidth * zoomScale}
+                height={layoutData.canvasHeight * zoomScale}
+                viewBox={`0 0 ${layoutData.canvasWidth} ${layoutData.canvasHeight}`}
+                style={StyleSheet.absoluteFill}
+              >
+                {/* 1. Render connecting relationship edges with cubic bezier curves & arrowheads */}
                 {conceptMap.edges.map((edge, eIdx) => {
-                  const src = nodePositions[edge.source];
-                  const tgt = nodePositions[edge.target];
+                  const src = layoutData.positions[edge.source];
+                  const tgt = layoutData.positions[edge.target];
                   if (!src || !tgt) return null;
 
                   const isConnectedToSelected =
                     selectedNodeId === edge.source || selectedNodeId === edge.target;
 
-                  // Edge midpoint for relationship label
-                  const midX = (src.x + tgt.x) / 2;
-                  const midY = (src.y + tgt.y) / 2;
+                  // Vertical orientation
+                  const isTgtBelow = tgt.y >= src.y;
+                  const startX = src.x;
+                  const startY = isTgtBelow ? src.y + src.height / 2 : src.y - src.height / 2;
+                  const endX = tgt.x;
+                  const endY = isTgtBelow ? tgt.y - tgt.height / 2 - 4 : tgt.y + tgt.height / 2 + 4;
+
+                  const dy = endY - startY;
+                  const controlOffset = Math.max(35, Math.abs(dy) * 0.45);
+                  const cp1X = startX;
+                  const cp1Y = isTgtBelow ? startY + controlOffset : startY - controlOffset;
+                  const cp2X = endX;
+                  const cp2Y = isTgtBelow ? endY - controlOffset : endY + controlOffset;
+
+                  const curvePath = `M ${startX} ${startY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${endX} ${endY}`;
+
+                  // Exact cubic bezier midpoint at t=0.5
+                  const midX = 0.125 * startX + 0.375 * cp1X + 0.375 * cp2X + 0.125 * endX;
+                  const midY = 0.125 * startY + 0.375 * cp1Y + 0.375 * cp2Y + 0.125 * endY;
+
+                  // Arrowhead calculation
+                  const arrowDx = endX - cp2X;
+                  const arrowDy = endY - cp2Y;
+                  const angle = Math.atan2(arrowDy, arrowDx);
+                  const arrowSize = 7;
+                  const arrowP1X = endX;
+                  const arrowP1Y = endY;
+                  const arrowP2X = endX - arrowSize * Math.cos(angle - Math.PI / 6);
+                  const arrowP2Y = endY - arrowSize * Math.sin(angle - Math.PI / 6);
+                  const arrowP3X = endX - arrowSize * Math.cos(angle + Math.PI / 6);
+                  const arrowP3Y = endY - arrowSize * Math.sin(angle + Math.PI / 6);
+                  const arrowPoints = `${arrowP1X},${arrowP1Y} ${arrowP2X},${arrowP2Y} ${arrowP3X},${arrowP3Y}`;
+
+                  const strokeColor = isConnectedToSelected ? colors.primary : lineStrokeColor;
 
                   return (
                     <G key={`edge_${eIdx}`}>
-                      <Line
-                        x1={src.x}
-                        y1={src.y + src.height / 2}
-                        x2={tgt.x}
-                        y2={tgt.y - tgt.height / 2}
-                        stroke={isConnectedToSelected ? colors.primary : lineStrokeColor}
+                      {/* Curved line */}
+                      <Path
+                        d={curvePath}
+                        stroke={strokeColor}
                         strokeWidth={isConnectedToSelected ? 2.5 : 1.5}
-                        strokeDasharray={isConnectedToSelected ? undefined : '4,3'}
+                        strokeDasharray={isConnectedToSelected ? undefined : '5,4'}
+                        fill="none"
                       />
+
+                      {/* Directional arrowhead */}
+                      <Polygon
+                        points={arrowPoints}
+                        fill={strokeColor}
+                      />
+
                       {/* Midpoint relationship pill */}
-                      <Rect
-                        x={midX - 38}
-                        y={midY - 9}
-                        width={76}
-                        height={18}
-                        rx={9}
-                        fill={isDark ? '#262629' : '#FFFFFF'}
-                        stroke={isConnectedToSelected ? colors.primary : colors.borderSubtle}
-                        strokeWidth={1}
-                      />
-                      <SvgText
-                        x={midX}
-                        y={midY + 3.5}
-                        fontSize={9}
-                        fontWeight="600"
-                        fill={isConnectedToSelected ? colors.primary : colors.textTertiary}
-                        textAnchor="middle"
-                      >
-                        {edge.label}
-                      </SvgText>
+                      {edge.label ? (
+                        <G>
+                          <Rect
+                            x={midX - 42}
+                            y={midY - 10}
+                            width={84}
+                            height={20}
+                            rx={10}
+                            fill={isDark ? '#262629' : '#FFFFFF'}
+                            stroke={isConnectedToSelected ? colors.primary : colors.borderSubtle}
+                            strokeWidth={isConnectedToSelected ? 1.5 : 1}
+                          />
+                          <SvgText
+                            x={midX}
+                            y={midY + 3.5}
+                            fontSize={9}
+                            fontWeight="600"
+                            fill={isConnectedToSelected ? colors.primary : colors.textTertiary}
+                            textAnchor="middle"
+                          >
+                            {edge.label.length > 15 ? `${edge.label.slice(0, 13)}…` : edge.label}
+                          </SvgText>
+                        </G>
+                      ) : null}
                     </G>
                   );
                 })}
 
                 {/* 2. Render concept nodes */}
                 {conceptMap.nodes.map((node) => {
-                  const pos = nodePositions[node.id];
+                  const pos = layoutData.positions[node.id];
                   if (!pos) return null;
 
                   const isSelected = selectedNodeId === node.id;
@@ -394,6 +490,9 @@ export const ConceptMapScreen: React.FC<ConceptMapScreenProps> = (props) => {
 
                   const nodeX = pos.x - pos.width / 2;
                   const nodeY = pos.y - pos.height / 2;
+
+                  const displayLabel =
+                    node.label.length > 20 ? `${node.label.slice(0, 18)}…` : node.label;
 
                   return (
                     <G
@@ -407,7 +506,7 @@ export const ConceptMapScreen: React.FC<ConceptMapScreenProps> = (props) => {
                           y={nodeY - 4}
                           width={pos.width + 8}
                           height={pos.height + 8}
-                          rx={20}
+                          rx={18}
                           fill="transparent"
                           stroke={colors.primary}
                           strokeWidth={2}
@@ -421,7 +520,7 @@ export const ConceptMapScreen: React.FC<ConceptMapScreenProps> = (props) => {
                         y={nodeY}
                         width={pos.width}
                         height={pos.height}
-                        rx={16}
+                        rx={14}
                         fill={isSelected ? catStyle.bg : isDark ? '#232326' : '#FFFFFF'}
                         stroke={isSelected ? catStyle.border : colors.borderSubtle}
                         strokeWidth={isSelected ? 2 : 1}
@@ -437,14 +536,14 @@ export const ConceptMapScreen: React.FC<ConceptMapScreenProps> = (props) => {
 
                       {/* Node Label Text */}
                       <SvgText
-                        x={pos.x + 4}
+                        x={pos.x + 8}
                         y={pos.y + 4}
                         fontSize={node.category === 'root' ? 12 : 11}
                         fontWeight={isSelected ? '700' : '600'}
                         fill={isSelected ? catStyle.text : colors.textPrimary}
                         textAnchor="middle"
                       >
-                        {node.label}
+                        {displayLabel}
                       </SvgText>
                     </G>
                   );
@@ -453,6 +552,45 @@ export const ConceptMapScreen: React.FC<ConceptMapScreenProps> = (props) => {
             </View>
           </ScrollView>
         </ScrollView>
+
+        {/* Floating Zoom Controls (+, -, Reset) */}
+        <View
+          style={[
+            styles.zoomControls,
+            {
+              backgroundColor: isDark ? 'rgba(38,38,41,0.92)' : 'rgba(255,255,255,0.92)',
+              borderColor: colors.borderSubtle,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.zoomButton}
+            onPress={handleZoomIn}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="add" size={18} color={colors.textPrimary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.zoomResetButton}
+            onPress={handleResetZoom}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.zoomLevelText, { color: colors.textSecondary }]}>
+              {Math.round(zoomScale * 100)}%
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.zoomButton}
+            onPress={handleZoomOut}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="remove" size={18} color={colors.textPrimary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Interactive Concept Inspection Bottom Sheet */}
@@ -606,12 +744,48 @@ const styles = StyleSheet.create({
   },
   canvasContainer: {
     flex: 1,
+    position: 'relative',
   },
   canvasHorizontalScroll: {
     flexGrow: 1,
   },
   canvasVerticalScroll: {
     flexGrow: 1,
+  },
+  zoomControls: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    paddingHorizontal: 4,
+    paddingVertical: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+    zIndex: 10,
+  },
+  zoomButton: {
+    width: 32,
+    height: 32,
+    borderRadius: borderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  zoomResetButton: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  zoomLevelText: {
+    ...typography.presets.caption,
+    fontSize: 11,
+    fontWeight: '700',
   },
   inspectCard: {
     borderTopWidth: 1,
