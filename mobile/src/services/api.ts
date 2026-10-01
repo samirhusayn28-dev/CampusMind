@@ -257,15 +257,36 @@ export async function extractDocumentText(
   storagePath: string,
   fileName: string
 ): Promise<ExtractionResult & { format?: string }> {
-  const data = await requestBackend<any>(
-    '/api/extract/document',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ storagePath, fileName }),
-    },
-    'extract document text'
-  );
+  let data: any;
+
+  try {
+    data = await requestBackend<any>(
+      '/api/extract/document',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storagePath, fileName }),
+      },
+      'extract document text'
+    );
+  } catch (err: any) {
+    const errMsg = (err.message || '').toLowerCase();
+    const isPdfFile = /\.pdf$/i.test(fileName);
+    // Only fall back to /api/extract/pdf if the endpoint was not found AND the document is actually a PDF
+    if ((errMsg.includes('not found') || errMsg.includes('404')) && isPdfFile) {
+      data = await requestBackend<any>(
+        '/api/extract/pdf',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storagePath, fileName }),
+        },
+        'extract PDF text'
+      );
+    } else {
+      throw err;
+    }
+  }
 
   const text = (data.text || '').trim();
   const quality = isTextReadable(text);

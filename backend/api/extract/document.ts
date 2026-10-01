@@ -325,6 +325,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       format,
       fileName: fileName || `Document.${format}`,
       wordCount,
+      info: {},
     });
   } catch (error: any) {
     console.error('[Document Extraction Error]', error);

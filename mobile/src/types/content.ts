@@ -88,6 +88,7 @@ export interface StudyMaterial {
   originalFileName?: string;
   audioDurationSeconds?: number;
   createdAt: string;
+  updatedAt?: string;
   lastReviewedAt?: string;
   nextReviewDate?: string;
   reviewIntervalDays?: number;

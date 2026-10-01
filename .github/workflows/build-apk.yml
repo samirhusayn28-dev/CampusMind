@@ -147,13 +147,13 @@ jobs:
 
             Download and install the standalone **CampusMind Universal Android APK** directly onto your phone without needing Expo Go or any local developer setup.
 
-            ### 🚀 What's New in v1.3.1:
-            - **Large PDF & AI Summarization Fixes:** Resolved timeouts on large 15–20MB PDFs with smart text sampling, 60s function duration, and reliable AI summary and quiz generation.
-            - **PDF Validation & Upload Progress:** Added strict magic bytes checking (%PDF-) on client and backend to reject corrupted/non-PDF files, clamped upload progress strictly within 0–100%, and added a 20MB max file indicator.
-            - **UI & Layout Fixes:** Fixed squeezed action cards on the Home screen, centered the "Choose PDF from Files" button, and centered the translation loading state.
-            - **Restored Audio & Notes OCR Action Buttons:** Fully restored "Start Recording" and camera/gallery buttons with intact click handlers.
-            - **Custom Course/Subject Removal:** Added ability to remove custom subjects in the modal with safeguards preventing accidental deletion if materials are assigned.
-            - **Refined Navigation:** Removed unwanted background pill indicator when tapping bottom navigation icons.
+            ### 🚀 What's New in v1.4.1:
+            - **Multi-Format Document Upload & Extraction:** Full production support for PDF (.pdf), Word (.docx), PowerPoint (.pptx), Excel (.xlsx), and CSV (.csv) up to 25MB with binary magic byte validation, structured markdown headings, slide sequencing, and responsive tables.
+            - **Firebase Account Deletion with Google Reauthentication:** Safe, permanent account deletion requiring exact username confirmation and mandatory Google reauthentication prior to any destructive operation, preventing partial deletion and cleanly wiping user data, cloud files, and auth credentials.
+            - **In-App Resource Content Editor:** In-place study resource updates preserving document ID, subject, and title without 404 export errors, with full Markdown list and table formatting.
+            - **Mobile Keyboard Content Accessibility:** Configured `softwareKeyboardLayoutMode: resize` and managed ScrollView tap handling to eliminate keyboard occlusion across Android devices.
+            - **Dynamic Semantic Update Checker:** Real-time update checks sourced directly from app configuration with numerical semantic comparison.
+            - **Custom Themed Confirmation Modals:** Full Material You dialogs replacing native Android alerts for subject deletion and account deletion.
 
             ### ✨ Core Features:
             - **Material You Aesthetic:** Soft pastel palette, cozy warm charcoal dark mode, rounded Plus Jakarta Sans typography, and fluid micro-interactions.

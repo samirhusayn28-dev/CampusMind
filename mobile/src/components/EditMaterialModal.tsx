@@ -22,7 +22,6 @@ import { StudyMaterial } from '../types/content';
 import { triggerHaptic } from '../services/haptics';
 import { showThemedAlert, showThemedToast } from '../store/useNotificationStore';
 import { RichMarkdown } from './RichMarkdown';
-import { exportEditedDocument } from '../services/api';
 import { isTextReadable } from '../utils/textQuality';
 
 interface EditMaterialModalProps {
@@ -42,10 +41,10 @@ export const EditMaterialModal: React.FC<EditMaterialModalProps> = ({
   const insets = useSafeAreaInsets();
   const user = useAuthStore((state) => state.user);
   const addCustomSubject = useAuthStore((state) => state.addCustomSubject);
-  const saveExtractedMaterial = useContentStore((state) => state.saveExtractedMaterial);
+  const updateMaterialContent = useContentStore((state) => state.updateMaterialContent);
   const materials = useContentStore((state) => state.materials);
 
-  const [title, setTitle] = useState(`${material.title} (Edited)`);
+  const [title, setTitle] = useState(material.title || 'Untitled Material');
   const [subject, setSubject] = useState(material.subject || 'General Studies');
   const [text, setText] = useState(material.extractedText || '');
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
@@ -142,45 +141,32 @@ export const EditMaterialModal: React.FC<EditMaterialModalProps> = ({
       return;
     }
 
-    const cleanTitle = title.trim() || `${material.title} (Edited)`;
+    const cleanTitle = title.trim() || material.title || 'Untitled Material';
     const cleanSubject = subject.trim() || 'General Studies';
-    const userId = user?.uid || 'guest_user';
 
     setIsSaving(true);
     triggerHaptic('lightImpact');
 
     try {
-      // 1. Export as genuine Word .docx and store in Supabase storage via backend
-      const exportRes = await exportEditedDocument({
+      const updatedMaterial = await updateMaterialContent(material.id, {
         title: cleanTitle,
         subject: cleanSubject,
-        text: cleanText,
-        userId,
-      });
-
-      // 2. Ingest into mobile study store as a separate, brand-new study material
-      const newMaterial = await saveExtractedMaterial({
-        title: cleanTitle,
-        subject: cleanSubject,
-        type: 'pdf',
-        text: cleanText,
-        userId,
-        originalFileName: exportRes.fileName,
-        storagePath: exportRes.storagePath,
+        extractedText: cleanText,
+        wordCount,
       });
 
       triggerHaptic('successNotification');
-      showThemedToast('success', `Created "${cleanTitle}" as new material!`);
+      showThemedToast('success', `Saved changes to "${cleanTitle}"!`);
 
       onClose();
       if (onSuccess) {
-        onSuccess(newMaterial);
+        onSuccess(updatedMaterial);
       }
     } catch (err: any) {
       triggerHaptic('errorNotification');
       showThemedAlert(
         'Save Failed',
-        err.message || 'Could not export and re-ingest your edited material.'
+        err.message || 'Could not save your changes. Please try again.'
       );
     } finally {
       setIsSaving(false);
@@ -222,7 +208,7 @@ export const EditMaterialModal: React.FC<EditMaterialModalProps> = ({
               Edit Study Content
             </Text>
             <Text style={[styles.headerSub, { color: colors.textSecondary }]}>
-              Re-uploads as a brand new material
+              Save updates in-place
             </Text>
           </View>
 
@@ -236,10 +222,10 @@ export const EditMaterialModal: React.FC<EditMaterialModalProps> = ({
             activeOpacity={0.8}
           >
             {isSaving ? (
-              <ActivityIndicator size="small" color={colors.primary} />
+              <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <>
-                <Ionicons name="cloud-upload-outline" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+                <Ionicons name="save-outline" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
                 <Text style={styles.saveBtnText}>Save</Text>
               </>
             )}
@@ -448,8 +434,17 @@ export const EditMaterialModal: React.FC<EditMaterialModalProps> = ({
                 onPress={() => handleInsertSnippet('- ', '', 'Bullet item')}
                 activeOpacity={0.7}
               >
-                <Ionicons name="list" size={14} color={colors.textPrimary} />
-                <Text style={[styles.toolChipText, { color: colors.textPrimary, marginLeft: 3 }]}>List</Text>
+                <Ionicons name="list-outline" size={14} color={colors.textPrimary} />
+                <Text style={[styles.toolChipText, { color: colors.textPrimary, marginLeft: 3 }]}>Bullets</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.toolChip, { backgroundColor: colors.surface }]}
+                onPress={() => handleInsertSnippet('1. ', '', 'Numbered item')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="reorder-four-outline" size={14} color={colors.textPrimary} />
+                <Text style={[styles.toolChipText, { color: colors.textPrimary, marginLeft: 3 }]}>Numbered</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -462,6 +457,15 @@ export const EditMaterialModal: React.FC<EditMaterialModalProps> = ({
                   Table
                 </Text>
               </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.toolChip, { backgroundColor: colors.surface }]}
+                onPress={() => handleInsertSnippet('> ', '', 'Quoted note')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="chatbox-ellipses-outline" size={14} color={colors.textPrimary} />
+                <Text style={[styles.toolChipText, { color: colors.textPrimary, marginLeft: 3 }]}>Quote</Text>
+              </TouchableOpacity>
             </ScrollView>
           </View>
         )}
@@ -469,26 +473,33 @@ export const EditMaterialModal: React.FC<EditMaterialModalProps> = ({
         {/* Content Body */}
         <View style={styles.bodyContainer}>
           {activeTab === 'edit' ? (
-            <TextInput
-              ref={inputRef}
-              style={[
-                styles.editorInput,
-                {
-                  color: colors.textPrimary,
-                  backgroundColor: colors.background,
-                },
-              ]}
-              multiline
-              textAlignVertical="top"
-              value={text}
-              onChangeText={setText}
-              onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
-              placeholder="Paste or write study notes, headings, and markdown tables here..."
-              placeholderTextColor={colors.textTertiary}
-              editable={!isSaving}
-              autoCorrect={false}
-              autoCapitalize="sentences"
-            />
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{ flexGrow: 1, paddingBottom: spacing.massive }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={true}
+            >
+              <TextInput
+                ref={inputRef}
+                style={[
+                  styles.editorInput,
+                  {
+                    color: colors.textPrimary,
+                    backgroundColor: colors.background,
+                  },
+                ]}
+                multiline
+                textAlignVertical="top"
+                value={text}
+                onChangeText={setText}
+                onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
+                placeholder="Paste or write study notes, headings, tables (| Col 1 | Col 2 |), and lists (- bullet, 1. numbered) here..."
+                placeholderTextColor={colors.textTertiary}
+                editable={!isSaving}
+                autoCorrect={false}
+                autoCapitalize="sentences"
+              />
+            </ScrollView>
           ) : (
             <ScrollView
               style={styles.previewContainer}

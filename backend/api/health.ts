@@ -10,7 +10,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     status: 'ok',
     service: 'CampusMind API',
     timestamp: new Date().toISOString(),
-    version: '1.0.6',
+    version: '1.4.1',
     models: {
       text: GROQ_MODELS.text,
       vision: GROQ_MODELS.vision,

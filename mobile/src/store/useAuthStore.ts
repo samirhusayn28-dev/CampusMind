@@ -12,6 +12,7 @@ import {
   completeUserProfileOnboarding,
   addCustomSubjectToFirestore,
   removeCustomSubjectFromFirestore,
+  deleteUserAccount,
 } from '../services/firebase';
 import { loadCloudSettings, loadCloudHabits } from '../services/sync';
 import { useHabitStore } from './useHabitStore';
@@ -31,6 +32,7 @@ interface AuthStoreState {
   signInWithGoogle: () => Promise<void>;
   signInAsGuest: (name?: string) => Promise<void>;
   signOut: () => Promise<void>;
+  deleteAccount: (confirmUsername: string) => Promise<void>;
   completeOnboarding: () => Promise<void>;
   completeProfileOnboarding: (data: {
     username: string;
@@ -168,6 +170,55 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
       });
     } catch (err: any) {
       set({ isLoading: false, error: err.message });
+    }
+  },
+
+  deleteAccount: async (confirmUsername: string): Promise<void> => {
+    const current = get().user;
+    if (!current?.uid) {
+      throw new Error('No active user account found.');
+    }
+
+    const cleanInput = (confirmUsername || '').trim().toLowerCase().replace(/^@/, '');
+    const expectedUsername = (
+      current.username ||
+      current.displayName ||
+      'student'
+    )
+      .trim()
+      .toLowerCase()
+      .replace(/^@/, '');
+
+    if (cleanInput !== expectedUsername) {
+      throw new Error(
+        `Confirmation mismatch. Please enter "${expectedUsername}" exactly to delete your account.`
+      );
+    }
+
+    set({ isLoading: true });
+
+    try {
+      await deleteUserAccount(confirmUsername);
+
+      try {
+        const { useContentStore } = await import('./useContentStore');
+        useContentStore.setState({ materials: [], activeMaterial: null });
+      } catch {}
+
+      try {
+        useHabitStore.getState().resetHabits();
+      } catch {}
+
+      set({
+        user: null,
+        isAuthenticated: false,
+        hasCompletedOnboarding: false,
+        isLoading: false,
+        error: null,
+      });
+    } catch (err: any) {
+      set({ isLoading: false, error: err.message });
+      throw err;
     }
   },
 

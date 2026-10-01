@@ -15,7 +15,7 @@ import { StudyMaterial } from '../types/content';
 const LOCAL_STORAGE_KEY = '@campusmind_cached_materials_v1';
 
 // Get local cache
-async function getCachedMaterials(): Promise<StudyMaterial[]> {
+export async function getCachedMaterials(): Promise<StudyMaterial[]> {
   try {
     const raw = await AsyncStorage.getItem(LOCAL_STORAGE_KEY);
     return raw ? JSON.parse(raw) : [];

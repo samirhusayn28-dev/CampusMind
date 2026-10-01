@@ -1,7 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 // @ts-ignore - getReactNativePersistence is available in react-native entry
-import { initializeAuth, getReactNativePersistence, getAuth, GoogleAuthProvider, signInWithCredential, signInAnonymously, signOut, onAuthStateChanged, User } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, serverTimestamp, collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { initializeAuth, getReactNativePersistence, getAuth, GoogleAuthProvider, signInWithCredential, signInAnonymously, signOut, onAuthStateChanged, User, deleteUser, reauthenticateWithCredential } from 'firebase/auth';
+import { getFirestore, doc, setDoc, getDoc, serverTimestamp, collection, query, where, getDocs, limit, deleteDoc } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { UserProfile, EducationLevel } from '../types/auth';
@@ -462,4 +462,150 @@ export async function removeCustomSubjectFromFirestore(uid: string, subjectToRem
     console.error('[Firestore] Failed to remove custom subject:', err);
     return [];
   }
+}
+
+// Permanently delete user account, Firestore profile, all user study resources, and device cache
+export async function deleteUserAccount(confirmUsername: string): Promise<void> {
+  const currentAuthUser = auth.currentUser;
+  if (!currentAuthUser) {
+    throw new Error('No active authenticated session found. Please sign in again.');
+  }
+
+  const uid = currentAuthUser.uid;
+
+  // 1. Authoritative username verification from Firestore
+  let authoritativeUsername = 'student';
+  try {
+    const userDocSnap = await getDoc(doc(db, 'users', uid));
+    if (userDocSnap.exists()) {
+      const data = userDocSnap.data();
+      authoritativeUsername = (data?.username || data?.displayName || currentAuthUser.displayName || 'student')
+        .trim()
+        .toLowerCase()
+        .replace(/^@/, '');
+    } else {
+      authoritativeUsername = (currentAuthUser.displayName || 'student')
+        .trim()
+        .toLowerCase()
+        .replace(/^@/, '');
+    }
+  } catch (fetchErr) {
+    console.warn('[Account Deletion] Could not fetch server profile, using session displayName:', fetchErr);
+    authoritativeUsername = (currentAuthUser.displayName || 'student')
+      .trim()
+      .toLowerCase()
+      .replace(/^@/, '');
+  }
+
+  const cleanInput = (confirmUsername || '').trim().toLowerCase().replace(/^@/, '');
+  if (cleanInput !== authoritativeUsername) {
+    throw new Error(`Confirmation mismatch: Please type "@${authoritativeUsername}" exactly to delete your account.`);
+  }
+
+  // 2. Reauthenticate FIRST using the existing Google Sign-In provider before ANY destructive deletion
+  if (!currentAuthUser.isAnonymous) {
+    configureGoogleSignIn();
+    try {
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    } catch (e) {
+      console.warn('[Account Deletion] Play services check warning:', e);
+    }
+
+    let idToken: string | undefined;
+    try {
+      const response = await GoogleSignin.signIn();
+      idToken = (response as any)?.data?.idToken || (response as any)?.idToken;
+    } catch (gErr: any) {
+      const code = String(gErr?.code || '');
+      const msg = String(gErr?.message || '').toLowerCase();
+      if (
+        code === statusCodes?.SIGN_IN_CANCELLED ||
+        code === 'SIGN_IN_CANCELLED' ||
+        code === '12501' ||
+        msg.includes('cancel')
+      ) {
+        throw new Error('Reauthentication was cancelled. Account deletion aborted.');
+      }
+      throw new Error('Could not verify your identity with Google. Account deletion was aborted.');
+    }
+
+    if (!idToken) {
+      throw new Error('Reauthentication failed: Could not retrieve Google credentials. Deletion aborted.');
+    }
+
+    // Reauthenticate with Firebase Auth using existing Google credential
+    const credential = GoogleAuthProvider.credential(idToken);
+    try {
+      await reauthenticateWithCredential(currentAuthUser, credential);
+    } catch (reauthErr: any) {
+      console.error('[Account Deletion] Firebase reauthentication failed:', reauthErr);
+      throw new Error('Identity verification failed. No account data was deleted.');
+    }
+  }
+
+  // 3. Destructive account deletion begins ONLY after successful reauthentication
+  // A. Delete all user study materials and associated cloud storage
+  try {
+    const materialsCol = collection(db, 'users', uid, 'materials');
+    const snap = await getDocs(materialsCol);
+    const storagePaths: string[] = [];
+    for (const docSnap of snap.docs) {
+      const data = docSnap.data();
+      if (data?.storagePath && typeof data.storagePath === 'string') {
+        storagePaths.push(data.storagePath);
+      }
+      await deleteDoc(doc(db, 'users', uid, 'materials', docSnap.id));
+    }
+
+    if (storagePaths.length > 0) {
+      try {
+        const { deleteSupabaseStorageFiles } = await import('./api');
+        await deleteSupabaseStorageFiles(storagePaths).catch(() => {});
+      } catch {}
+    }
+  } catch (err: any) {
+    console.error('[Account Deletion] Error deleting user materials:', err);
+    throw new Error('Could not delete study resources. Account deletion aborted.');
+  }
+
+  // B. Delete user profile document from Firestore
+  try {
+    const userDocRef = doc(db, 'users', uid);
+    await deleteDoc(userDocRef);
+  } catch (err: any) {
+    console.error('[Account Deletion] Error deleting user profile document:', err);
+    throw new Error('Could not delete user profile. Account deletion aborted.');
+  }
+
+  // C. Delete Firebase Auth user now that reauthentication succeeded
+  try {
+    await deleteUser(currentAuthUser);
+  } catch (authErr: any) {
+    console.error('[Account Deletion] deleteUser failed:', authErr);
+    throw new Error('Could not complete authentication removal. Please contact support.');
+  }
+
+  // D. Clear all device local storage & caches
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const campusMindKeys = keys.filter(
+      (k) => k.startsWith('@campusmind') || k.startsWith('campusmind')
+    );
+    if (campusMindKeys.length > 0) {
+      await AsyncStorage.multiRemove(campusMindKeys);
+    }
+  } catch (err) {
+    console.warn('[Account Deletion] Local storage purge warning:', err);
+  }
+
+  // E. Sign out from Google Native and Firebase Auth
+  try {
+    if (GoogleSignin && typeof GoogleSignin.signOut === 'function') {
+      await GoogleSignin.signOut().catch(() => {});
+    }
+  } catch {}
+
+  try {
+    await signOut(auth).catch(() => {});
+  } catch {}
 }

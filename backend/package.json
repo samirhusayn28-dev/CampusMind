@@ -1,6 +1,6 @@
 {
   "name": "campusmind-backend",
-  "version": "1.0.0",
+  "version": "1.4.1",
   "description": "CampusMind Serverless Backend for AI, OCR, Whispering, PDF parsing, and RAG",
   "type": "module",
   "scripts": {

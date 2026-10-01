@@ -28,6 +28,7 @@ import { isTextReadable } from '../utils/textQuality';
 import { StructuredTableRenderer } from '../components/StructuredTableRenderer';
 import { StructuredChartRenderer } from '../components/StructuredChartRenderer';
 import { EditMaterialModal } from '../components/EditMaterialModal';
+import { RichMarkdown } from '../components/RichMarkdown';
 
 interface ContentSummaryScreenProps {
   onBack?: () => void;
@@ -742,9 +743,7 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = (props)
           {showOriginalText && (
             <View style={[styles.originalTextBox, { backgroundColor: colors.surface }]}>
               {textQuality.readable ? (
-                <Text style={[styles.originalTextContent, { color: colors.textSecondary }]}>
-                  {material.extractedText}
-                </Text>
+                <RichMarkdown content={material.extractedText} />
               ) : (
                 <Text style={[styles.originalTextContent, { color: colors.textTertiary, fontStyle: 'italic' }]}>
                   Text contains unreadable formatting or binary characters and cannot be rendered cleanly.

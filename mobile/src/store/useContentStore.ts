@@ -15,6 +15,7 @@ import {
   saveMaterial,
   fetchUserMaterials,
   deleteMaterial as deleteMaterialFromService,
+  getCachedMaterials,
 } from '../services/content';
 import { calculateNextReview } from '../services/spacedRepetition';
 import { useAuthStore } from './useAuthStore';
@@ -67,6 +68,15 @@ interface ContentStoreState {
   generateQuizForMaterial: (materialId: string, userId: string) => Promise<QuizQuestion[]>;
   generateConceptMapForMaterial: (materialId: string, userId: string) => Promise<ConceptMapData>;
   recordMaterialReview: (materialId: string, performanceScore: number) => Promise<StudyMaterial>;
+  updateMaterialContent: (
+    materialId: string,
+    updates: {
+      title: string;
+      subject: string;
+      extractedText: string;
+      wordCount: number;
+    }
+  ) => Promise<StudyMaterial>;
   deleteMaterial: (id: string, userId: string) => Promise<void>;
   cascadeDeleteSubject: (subjectName: string, userId: string) => Promise<number>;
   setActiveMaterial: (material: StudyMaterial | null) => void;
@@ -628,6 +638,55 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
     set({
       materials: updatedMaterials,
       activeMaterial: get().activeMaterial?.id === materialId ? updatedMaterial : get().activeMaterial,
+    });
+
+    return updatedMaterial;
+  },
+
+  updateMaterialContent: async (
+    materialId: string,
+    updates: {
+      title: string;
+      subject: string;
+      extractedText: string;
+      wordCount: number;
+    }
+  ): Promise<StudyMaterial> => {
+    let target = get().materials.find((m) => m.id === materialId);
+    if (!target) {
+      try {
+        const cached = await getCachedMaterials();
+        target = cached.find((m: StudyMaterial) => m.id === materialId);
+      } catch {}
+    }
+
+    if (!target) {
+      throw new Error('The requested study resource was not found. Please try again.');
+    }
+
+    const updatedMaterial: StudyMaterial = {
+      ...target,
+      title: updates.title,
+      subject: updates.subject,
+      extractedText: updates.extractedText,
+      wordCount: updates.wordCount,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await saveMaterial(updatedMaterial);
+
+    const updatedMaterials = get().materials.map((m) =>
+      m.id === materialId ? updatedMaterial : m
+    );
+
+    const finalMaterials = updatedMaterials.some((m) => m.id === materialId)
+      ? updatedMaterials
+      : [updatedMaterial, ...get().materials];
+
+    set({
+      materials: finalMaterials,
+      activeMaterial:
+        get().activeMaterial?.id === materialId ? updatedMaterial : get().activeMaterial,
     });
 
     return updatedMaterial;

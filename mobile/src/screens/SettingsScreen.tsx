@@ -8,6 +8,10 @@ import {
   Switch,
   ActivityIndicator,
   Image,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -34,7 +38,7 @@ const SPEECH_RATES: SpeechPlaybackRate[] = [0.8, 1.0, 1.25, 1.5];
 
 export const SettingsScreen: React.FC = () => {
   const { colors, isDark, toggleTheme } = useThemeStore();
-  const { user, signOut, signInWithGoogle, isLoading: isAuthLoading } = useAuthStore();
+  const { user, signOut, signInWithGoogle, deleteAccount, isLoading: isAuthLoading } = useAuthStore();
   const { setActiveMaterial, loadMaterials, materials } = useContentStore();
 
   const {
@@ -63,6 +67,40 @@ export const SettingsScreen: React.FC = () => {
   } = useSettingsStore();
 
   const [isClearingCache, setIsClearingCache] = useState(false);
+  const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+
+  const expectedUsername = useMemo(() => {
+    return (user?.username || user?.displayName || 'student')
+      .trim()
+      .toLowerCase()
+      .replace(/^@/, '');
+  }, [user]);
+
+  const isDeleteUsernameMatch = useMemo(() => {
+    return deleteConfirmText.trim().toLowerCase().replace(/^@/, '') === expectedUsername;
+  }, [deleteConfirmText, expectedUsername]);
+
+  const handleDeleteAccount = async () => {
+    if (!isDeleteUsernameMatch || isDeletingAccount) return;
+
+    setIsDeletingAccount(true);
+    triggerHaptic('heavyImpact');
+
+    try {
+      await deleteAccount(deleteConfirmText);
+      setIsDeleteModalVisible(false);
+      setDeleteConfirmText('');
+      triggerHaptic('successNotification');
+      showThemedToast('info', 'Your account and data have been permanently deleted.');
+    } catch (err: any) {
+      triggerHaptic('errorNotification');
+      showThemedAlert('Deletion Error', err.message || 'Failed to delete account.');
+    } finally {
+      setIsDeletingAccount(false);
+    }
+  };
 
   const handleSignOut = () => {
     triggerHaptic('warningNotification');
@@ -571,14 +609,35 @@ export const SettingsScreen: React.FC = () => {
 
         {/* Account Actions */}
         <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Account</Text>
-        <TouchableOpacity
-          style={[styles.signOutBtn, { backgroundColor: colors.surfaceSubtle }]}
-          onPress={handleSignOut}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="log-out-outline" size={18} color={colors.peach} />
-          <Text style={[styles.signOutText, { color: colors.peach }]}>Sign Out</Text>
-        </TouchableOpacity>
+        <View style={styles.accountActionGroup}>
+          <TouchableOpacity
+            style={[styles.signOutBtn, { backgroundColor: colors.surfaceSubtle }]}
+            onPress={handleSignOut}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="log-out-outline" size={18} color={colors.peach} />
+            <Text style={[styles.signOutText, { color: colors.peach }]}>Sign Out</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.deleteAccountBtn,
+              {
+                backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : 'rgba(239, 68, 68, 0.08)',
+                borderColor: '#EF4444',
+              },
+            ]}
+            onPress={() => {
+              triggerHaptic('warningNotification');
+              setDeleteConfirmText('');
+              setIsDeleteModalVisible(true);
+            }}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="trash-outline" size={18} color="#EF4444" />
+            <Text style={[styles.deleteAccountText, { color: '#EF4444' }]}>Delete Account</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* About App */}
         <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>About</Text>
@@ -612,6 +671,101 @@ export const SettingsScreen: React.FC = () => {
           </View>
         </Card>
       </ScrollView>
+
+      {/* Delete Account Themed Confirmation Modal */}
+      <Modal
+        visible={isDeleteModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isDeletingAccount) setIsDeleteModalVisible(false);
+        }}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View
+            style={[
+              styles.deleteDialogCard,
+              {
+                backgroundColor: isDark ? colors.surfaceElevated : colors.surface,
+                borderColor: '#EF4444',
+              },
+            ]}
+          >
+            <View style={styles.deleteDialogHeader}>
+              <View style={[styles.deleteIconCircle, { backgroundColor: 'rgba(239, 68, 68, 0.15)' }]}>
+                <Ionicons name="warning" size={26} color="#EF4444" />
+              </View>
+              <Text style={[styles.deleteDialogTitle, { color: colors.textPrimary }]}>
+                Delete Account Permanently?
+              </Text>
+              <Text style={[styles.deleteDialogDesc, { color: colors.textSecondary }]}>
+                This action is irreversible. All your study materials, flashcards, quizzes, streak progress, and cloud data will be permanently erased.
+              </Text>
+            </View>
+
+            <View style={[styles.userBadgeRow, { backgroundColor: colors.surfaceSubtle }]}>
+              <Ionicons name="person-circle-outline" size={20} color={colors.textSecondary} />
+              <Text style={[styles.userBadgeText, { color: colors.textPrimary }]}>
+                Account: @{expectedUsername}
+              </Text>
+            </View>
+
+            <View style={styles.confirmInputSection}>
+              <Text style={[styles.confirmInputLabel, { color: colors.textSecondary }]}>
+                Type <Text style={{ fontWeight: '700', color: colors.textPrimary }}>@{expectedUsername}</Text> to confirm:
+              </Text>
+              <TextInput
+                style={[
+                  styles.deleteInput,
+                  {
+                    color: colors.textPrimary,
+                    borderColor: isDeleteUsernameMatch ? '#EF4444' : colors.borderSubtle,
+                    backgroundColor: colors.surface,
+                  },
+                ]}
+                placeholder={`@${expectedUsername}`}
+                placeholderTextColor={colors.textTertiary}
+                value={deleteConfirmText}
+                onChangeText={setDeleteConfirmText}
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!isDeletingAccount}
+              />
+            </View>
+
+            <View style={styles.deleteDialogActions}>
+              <TouchableOpacity
+                style={[styles.deleteCancelBtn, { backgroundColor: colors.surfaceSubtle }]}
+                onPress={() => setIsDeleteModalVisible(false)}
+                disabled={isDeletingAccount}
+              >
+                <Text style={[styles.deleteCancelBtnText, { color: colors.textPrimary }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.deleteConfirmBtn,
+                  {
+                    backgroundColor: isDeleteUsernameMatch && !isDeletingAccount ? '#EF4444' : colors.surfaceSubtle,
+                    opacity: isDeleteUsernameMatch && !isDeletingAccount ? 1 : 0.5,
+                  },
+                ]}
+                onPress={handleDeleteAccount}
+                disabled={!isDeleteUsernameMatch || isDeletingAccount}
+              >
+                {isDeletingAccount ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.deleteConfirmBtnText}>Delete Permanently</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Themed Loader during Google Sign-in / Account Connect */}
       {isAuthLoading && (
@@ -779,6 +933,9 @@ const styles = StyleSheet.create({
     ...typography.presets.labelMedium,
     fontWeight: '700',
   },
+  accountActionGroup: {
+    gap: spacing.sm,
+  },
   signOutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -790,6 +947,116 @@ const styles = StyleSheet.create({
   signOutText: {
     ...typography.presets.labelLarge,
     fontWeight: '700',
+  },
+  deleteAccountBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs + 2,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.card,
+    borderWidth: 1,
+  },
+  deleteAccountText: {
+    ...typography.presets.labelLarge,
+    fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  deleteDialogCard: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: borderRadius.card,
+    padding: spacing.xl,
+    borderWidth: 1.5,
+    gap: spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  deleteDialogHeader: {
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  deleteIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: borderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
+  deleteDialogTitle: {
+    ...typography.presets.titleMedium,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  deleteDialogDesc: {
+    ...typography.presets.bodySmall,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  userBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
+  },
+  userBadgeText: {
+    ...typography.presets.labelMedium,
+    fontWeight: '600',
+  },
+  confirmInputSection: {
+    gap: spacing.xs,
+  },
+  confirmInputLabel: {
+    ...typography.presets.caption,
+  },
+  deleteInput: {
+    borderWidth: 1.5,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    ...typography.presets.bodyMedium,
+    fontWeight: '600',
+  },
+  deleteDialogActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  deleteCancelBtn: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteCancelBtnText: {
+    ...typography.presets.labelLarge,
+    fontWeight: '600',
+  },
+  deleteConfirmBtn: {
+    flex: 1.3,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteConfirmBtnText: {
+    ...typography.presets.labelLarge,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   aboutCard: {
     padding: spacing.lg,

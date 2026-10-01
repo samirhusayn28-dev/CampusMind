@@ -11,7 +11,6 @@ import {
   Platform,
   Keyboard,
   Image,
-  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -20,6 +19,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { detectDocumentFormat, MAX_DOCUMENT_SIZE_BYTES } from '../utils/documentValidation';
 import {
   useAudioRecorder,
   requestRecordingPermissionsAsync,
@@ -123,6 +123,10 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
       setSelectedSubject('');
     }
   }, [allSubjects]);
+
+  // Themed subject deletion confirmation state
+  const [subjectToDelete, setSubjectToDelete] = useState<string | null>(null);
+  const [isDeletingSubject, setIsDeletingSubject] = useState(false);
 
   // YouTube State
   const [youtubeUrl, setYoutubeUrl] = useState('');
@@ -231,33 +235,31 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
     }
 
     triggerHaptic('warningNotification');
-    Alert.alert(
-      `Delete "${subj}"?`,
-      `This will permanently delete this subject and ALL study material assigned to it. This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              triggerHaptic('heavyImpact');
-              const userId = user?.uid || 'guest_user';
-              await cascadeDeleteSubject(subj, userId);
-              await removeCustomSubject(subj);
-              if (selectedSubject.trim().toLowerCase() === subj.trim().toLowerCase()) {
-                const nextSubj = allSubjects.find((s) => s.toLowerCase() !== subj.toLowerCase()) || '';
-                setSelectedSubject(nextSubj);
-              }
-              showThemedToast('info', `Deleted "${subj}" and all assigned materials.`);
-            } catch (err: any) {
-              console.error('[Cascade Delete Error]:', err);
-              showThemedAlert('Error', 'Could not complete deletion. Please try again.');
-            }
-          },
-        },
-      ]
-    );
+    setSubjectToDelete(subj);
+  };
+
+  const confirmDeleteSubject = async () => {
+    if (!subjectToDelete || isDeletingSubject) return;
+
+    setIsDeletingSubject(true);
+    try {
+      triggerHaptic('heavyImpact');
+      const subj = subjectToDelete;
+      const userId = user?.uid || 'guest_user';
+      await cascadeDeleteSubject(subj, userId);
+      await removeCustomSubject(subj);
+      if (selectedSubject.trim().toLowerCase() === subj.trim().toLowerCase()) {
+        const nextSubj = allSubjects.find((s) => s.toLowerCase() !== subj.toLowerCase()) || '';
+        setSelectedSubject(nextSubj);
+      }
+      setSubjectToDelete(null);
+      showThemedToast('info', `Deleted "${subj}" and all assigned materials.`);
+    } catch (err: any) {
+      console.error('[Cascade Delete Error]:', err);
+      showThemedAlert('Error', 'Could not complete deletion. Please try again.');
+    } finally {
+      setIsDeletingSubject(false);
+    }
   };
 
   const renderSubjectSelector = (disabled: boolean = false) => (
@@ -415,15 +417,9 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
 
       const file = res.assets[0];
 
-      // Format validation for supported document types: PDF, DOCX, PPTX, XLSX, CSV
-      const fileNameLower = (file.name || '').toLowerCase();
-      const isPdf = fileNameLower.endsWith('.pdf');
-      const isDocx = fileNameLower.endsWith('.docx');
-      const isPptx = fileNameLower.endsWith('.pptx');
-      const isXlsx = fileNameLower.endsWith('.xlsx');
-      const isCsv = fileNameLower.endsWith('.csv');
-
-      if (!isPdf && !isDocx && !isPptx && !isXlsx && !isCsv) {
+      // Format validation for all supported document types: PDF, DOCX, PPTX, XLSX, CSV
+      const detected = await detectDocumentFormat(file);
+      if (!detected) {
         triggerHaptic('errorNotification');
         showThemedAlert(
           'Unsupported Document Format',
@@ -432,50 +428,25 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
         return;
       }
 
-      // If PDF, verify authentic magic bytes
-      if (isPdf) {
-        try {
-          const headerB64 = await FileSystem.readAsStringAsync(file.uri, {
-            length: 1024,
-            encoding: FileSystem.EncodingType.Base64,
-          });
-          const headerStr = atob(headerB64.slice(0, 512));
-          if (!headerStr.includes('%PDF-')) {
-            triggerHaptic('errorNotification');
-            showThemedAlert(
-              'Invalid PDF File',
-              "This doesn't look like a valid PDF. Please upload a real PDF file."
-            );
-            return;
-          }
-        } catch (checkErr) {
-          console.warn('[PDF Validation] Could not inspect magic bytes:', checkErr);
-        }
-      }
-
       // Client-side 25MB check
       if (file.size && file.size > MAX_DOCUMENT_SIZE_BYTES) {
         triggerHaptic('errorNotification');
         const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
         showThemedAlert(
           'File Too Large',
-          `"${file.name}" is ${sizeMb}MB, which exceeds the 25MB limit. Please choose a smaller document.`
+          `"${detected.normalizedFileName}" is ${sizeMb}MB, which exceeds the 25MB limit. Please choose a smaller document.`
         );
         return;
       }
 
       setPdfUploadProgress(0);
 
-      // Determine MIME type
-      let mimeType = file.mimeType || 'application/octet-stream';
-      if (isPdf) mimeType = 'application/pdf';
-      else if (isDocx) mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-      else if (isPptx) mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-      else if (isXlsx) mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-      else if (isCsv) mimeType = 'text/csv';
+      // Determine standard MIME type & normalized file name
+      const mimeType = detected.mimeType;
+      const finalFileName = detected.normalizedFileName;
 
       // 1. Request signed upload URL from backend
-      const { signedUrl, storagePath } = await getSignedPdfUploadUrl(file.name);
+      const { signedUrl, storagePath } = await getSignedPdfUploadUrl(finalFileName);
 
       // 2. Convert local file to Blob
       let blob: Blob;
@@ -536,12 +507,12 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
 
       // 4. Send storagePath to backend for extraction
       const userId = user?.uid || 'guest_user';
-      await ingestPdf(storagePath, file.name, userId, selectedSubject);
+      await ingestPdf(storagePath, finalFileName, userId, selectedSubject);
 
       setPdfUploadProgress(null);
       triggerHaptic('successNotification');
       onClose();
-      showThemedToast('success', `"${file.name}" processed and saved!`);
+      showThemedToast('success', `"${finalFileName}" processed and saved!`);
     } catch (err: any) {
       setPdfUploadProgress(null);
       triggerHaptic('errorNotification');
@@ -1389,6 +1360,64 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
           )}
           </View>
         </KeyboardAvoidingView>
+
+        {/* Themed Custom Subject Deletion Modal */}
+        <Modal
+          visible={Boolean(subjectToDelete)}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            if (!isDeletingSubject) setSubjectToDelete(null);
+          }}
+        >
+          <View style={styles.themedDeleteOverlay}>
+            <View
+              style={[
+                styles.themedDeleteCard,
+                {
+                  backgroundColor: isDark ? colors.surfaceElevated : colors.surface,
+                  borderColor: '#EF4444',
+                },
+              ]}
+            >
+              <View style={[styles.themedDeleteIconCircle, { backgroundColor: 'rgba(239, 68, 68, 0.15)' }]}>
+                <Ionicons name="trash-outline" size={26} color="#EF4444" />
+              </View>
+              <Text style={[styles.themedDeleteTitle, { color: colors.textPrimary }]}>
+                Delete Subject?
+              </Text>
+              <Text style={[styles.themedDeleteMessage, { color: colors.textSecondary }]}>
+                Are you sure you want to delete <Text style={{ fontWeight: '700', color: colors.textPrimary }}>"{subjectToDelete}"</Text>? All study materials assigned to this subject will be permanently deleted. This action cannot be undone.
+              </Text>
+
+              <View style={styles.themedDeleteActions}>
+                <TouchableOpacity
+                  style={[styles.themedDeleteCancelBtn, { backgroundColor: colors.surfaceSubtle }]}
+                  onPress={() => setSubjectToDelete(null)}
+                  disabled={isDeletingSubject}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.themedDeleteCancelText, { color: colors.textPrimary }]}>
+                    Cancel
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.themedDeleteConfirmBtn, { backgroundColor: '#EF4444' }]}
+                  onPress={confirmDeleteSubject}
+                  disabled={isDeletingSubject}
+                  activeOpacity={0.8}
+                >
+                  {isDeletingSubject ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.themedDeleteConfirmText}>Delete</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     </Modal>
   );
@@ -1792,5 +1821,72 @@ const styles = StyleSheet.create({
   progressBarFill: {
     height: '100%',
     borderRadius: borderRadius.full,
+  },
+  themedDeleteOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  themedDeleteCard: {
+    width: '100%',
+    maxWidth: 380,
+    borderRadius: borderRadius.card,
+    padding: spacing.xl,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    gap: spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  themedDeleteIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: borderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  themedDeleteTitle: {
+    ...typography.presets.titleMedium,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  themedDeleteMessage: {
+    ...typography.presets.bodySmall,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  themedDeleteActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    width: '100%',
+    marginTop: spacing.xs,
+  },
+  themedDeleteCancelBtn: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  themedDeleteCancelText: {
+    ...typography.presets.labelLarge,
+    fontWeight: '600',
+  },
+  themedDeleteConfirmBtn: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  themedDeleteConfirmText: {
+    ...typography.presets.labelLarge,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

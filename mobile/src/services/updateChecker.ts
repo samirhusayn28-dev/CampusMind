@@ -1,5 +1,7 @@
-// CampusMind In-App Release & Update Checker
-export const CURRENT_APP_VERSION = '1.3.1';
+import appConfig from '../../app.json';
+
+// CampusMind In-App Release & Update Checker (dynamically sourced from app.json source of truth)
+export const CURRENT_APP_VERSION: string = (appConfig as any)?.expo?.version || '1.4.0';
 
 export interface AppUpdateInfo {
   updateAvailable: boolean;
@@ -12,24 +14,29 @@ export interface AppUpdateInfo {
 }
 
 /**
- * Compares two semantic version strings (e.g. "v1.2.0" and "1.1.0").
+ * Compares two semantic version strings (e.g. "v1.9.0" and "1.10.0").
  * Returns 1 if v1 > v2, -1 if v1 < v2, and 0 if equal.
  */
 export function compareSemver(v1: string, v2: string): number {
-  const clean = (v: string) =>
-    v
-      .replace(/^v/i, '')
-      .trim()
+  const clean = (v: string): number[] => {
+    if (!v || typeof v !== 'string') return [0];
+    // Strip leading 'v'/'V', and strip pre-release / build metadata tags (-beta, +123)
+    const core = v.replace(/^v/i, '').trim().split('-')[0].split('+')[0];
+    return core
       .split('.')
-      .map((part) => parseInt(part, 10) || 0);
+      .map((part) => {
+        const parsed = parseInt(part, 10);
+        return isNaN(parsed) ? 0 : parsed;
+      });
+  };
 
   const p1 = clean(v1);
   const p2 = clean(v2);
   const maxLen = Math.max(p1.length, p2.length);
 
   for (let i = 0; i < maxLen; i++) {
-    const num1 = p1[i] || 0;
-    const num2 = p2[i] || 0;
+    const num1 = p1[i] ?? 0;
+    const num2 = p2[i] ?? 0;
     if (num1 > num2) return 1;
     if (num1 < num2) return -1;
   }
