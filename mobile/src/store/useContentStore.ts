@@ -41,13 +41,15 @@ interface ContentStoreState {
     storagePath: string,
     fileName: string,
     userId: string,
-    subject?: string
+    subject?: string,
+    localFileUri?: string
   ) => Promise<StudyMaterial>;
   ingestDocument: (
     storagePath: string,
     fileName: string,
     userId: string,
-    subject?: string
+    subject?: string,
+    localFileUri?: string
   ) => Promise<StudyMaterial>;
   ingestYouTube: (url: string, userId: string, subject?: string) => Promise<StudyMaterial>;
   ingestAudio: (audioBase64: string, durationSeconds: number, userId: string, subject?: string) => Promise<StudyMaterial>;
@@ -145,7 +147,8 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
     storagePath: string,
     fileName: string,
     userId: string,
-    subject: string = 'General Studies'
+    subject: string = 'General Studies',
+    localFileUri?: string
   ) => {
     set({
       isIngesting: true,
@@ -155,10 +158,14 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
     });
 
     try {
-      const result = await extractPdfText(storagePath, fileName);
+      const result = await extractPdfText(storagePath, fileName, localFileUri);
 
       if (!result.text || result.text.trim().length < 20 || !isTextReadable(result.text).readable) {
-        throw new Error("We couldn't read this document's text properly. Try re-exporting it, or use Notes OCR instead.");
+        throw new Error(
+          /\.pdf$/i.test(fileName)
+            ? 'Could not extract text from this PDF. It may be scanned or image-based. Try using Notes OCR instead.'
+            : "We couldn't read this document's text properly. Try re-exporting it, or use Notes OCR instead."
+        );
       }
 
       set({ ingestionStage: 'Saving study material...' });
@@ -206,9 +213,10 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
     storagePath: string,
     fileName: string,
     userId: string,
-    subject: string = 'General Studies'
+    subject: string = 'General Studies',
+    localFileUri?: string
   ) => {
-    return get().ingestDocument(storagePath, fileName, userId, subject);
+    return get().ingestDocument(storagePath, fileName, userId, subject, localFileUri);
   },
 
   ingestYouTube: async (url: string, userId: string, subject: string = 'Computer Science') => {

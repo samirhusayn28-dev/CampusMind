@@ -45,6 +45,17 @@ export function isTextReadable(text: string | null | undefined): TextQualityResu
     };
   }
 
+  // 0. Binary control characters check (indicates raw binary or uncompressed byte dump)
+  if (/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(trimmed)) {
+    return {
+      readable: false,
+      readableRatio: 0,
+      replacementRatio: 0,
+      wordCoherenceRatio: 0,
+      reason: 'Text contains illegal binary control characters.',
+    };
+  }
+
   let readableCount = 0;
   let replacementCount = 0;
   const totalCount = trimmed.length;
@@ -96,15 +107,40 @@ export function isTextReadable(text: string | null | undefined): TextQualityResu
     };
   }
 
-  // 4. Word coherence check: tokens should contain words, numbers, or valid structure tokens rather than binary noise
+  // 4. Mojibake Latin-1 supplement stream noise check (compressed stream binary bytes decoded as Latin-1)
+  const latin1Count = (trimmed.match(/[\u0080-\u00FF]/g) || []).length;
+  const latin1Ratio = latin1Count / totalCount;
+  if (latin1Ratio > 0.08) {
+    return {
+      readable: false,
+      readableRatio,
+      replacementRatio,
+      wordCoherenceRatio: 0,
+      reason: `Corrupted stream character density (${Math.round(latin1Ratio * 100)}%) indicates binary stream noise rather than human-readable text.`,
+    };
+  }
+
+  // 5. Interleaved letter-digit-symbol noise check (e.g. Ù9, Ã9, â?§)
+  const interleavedNoise = (trimmed.match(/[\p{L}][0-9][\p{L}]|[0-9][\p{L}][0-9]|[\u0080-\u00FF][\p{P}\p{S}]/gu) || []).length;
+  if (interleavedNoise >= 2 && (interleavedNoise * 2) / totalCount > 0.05) {
+    return {
+      readable: false,
+      readableRatio,
+      replacementRatio,
+      wordCoherenceRatio: 0,
+      reason: 'Document consists of interleaved binary noise and symbol fragments.',
+    };
+  }
+
+  // 6. Word coherence check: tokens should contain words, numbers, or valid structure tokens rather than binary noise
   const words = trimmed.split(/\s+/).filter((w) => w.length >= 1);
-  if (words.length >= 5) {
+  if (words.length >= 1) {
     const coherentWords = words.filter(
       (w) => ALPHANUMERIC_CHAR_REGEX.test(w) || MARKDOWN_TOKEN_REGEX.test(w)
     ).length;
     const wordCoherenceRatio = coherentWords / words.length;
 
-    if (wordCoherenceRatio < 0.35) {
+    if (wordCoherenceRatio < 0.5) {
       return {
         readable: false,
         readableRatio,

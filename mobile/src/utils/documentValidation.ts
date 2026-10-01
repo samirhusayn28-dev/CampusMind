@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 export type SupportedDocumentFormat = 'pdf' | 'docx' | 'pptx' | 'xlsx' | 'csv';
 
@@ -56,6 +56,7 @@ export const SUPPORTED_DOCUMENT_FORMATS: SupportedFormatDefinition[] = [
       'text/csv',
       'application/csv',
       'text/comma-separated-values',
+      'text/plain',
       'application/vnd.ms-excel', // Android sometimes maps CSV to Excel MIME
     ],
     defaultMime: 'text/csv',

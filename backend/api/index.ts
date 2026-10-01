@@ -8,7 +8,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({
     name: 'CampusMind Serverless API',
     status: 'online',
-    version: '1.4.1',
+    version: '1.4.2',
     timestamp: new Date().toISOString(),
     endpoints: {
       health: '/api/health',

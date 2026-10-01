@@ -291,21 +291,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
     } else if (format === 'pdf') {
-      // PDF extraction via pdf-parse
+      // PDF extraction via pdfjs-dist legacy build (proper FlateDecode decompression, zero canvas/DOMMatrix dependencies)
       try {
-        const { PDFParse } = await import('pdf-parse');
-        pdfParser = new PDFParse({ data: buffer });
-        const textResult = await pdfParser.getText();
+        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+        const uint8Array = new Uint8Array(buffer);
+        const doc = await pdfjsLib.getDocument({
+          data: uint8Array,
+          useSystemFonts: true,
+          disableFontFace: true,
+        }).promise;
 
-        cleanText = (textResult.text || '')
-          .replace(/\r\n/g, '\n')
-          .replace(/[ \t]+/g, ' ')
-          .replace(/\n{3,}/g, '\n\n')
-          .trim();
-        numPages = textResult.pages?.length || 1;
+        numPages = doc.numPages || 1;
+        const pageOutputs: string[] = [];
+
+        for (let p = 1; p <= numPages; p++) {
+          const page = await doc.getPage(p);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items
+            .map((item: any) => ('str' in item ? item.str : ''))
+            .join(' ')
+            .replace(/[ \t]+/g, ' ')
+            .trim();
+
+          if (pageText) {
+            pageOutputs.push(numPages > 1 ? `### Page ${p}\n${pageText}` : pageText);
+          }
+        }
+
+        cleanText = pageOutputs.join('\n\n').trim();
+
+        if (!cleanText || cleanText.length < 20) {
+          return res.status(422).json({
+            error: "Could not extract text from this PDF. It may be scanned or image-based. Try using Notes OCR instead.",
+          });
+        }
       } catch (parserErr: any) {
+        console.error('[PDF Parser Error]:', parserErr);
         return res.status(422).json({
-          error: "We couldn't read this PDF's text properly. Try re-exporting it, or use Notes OCR instead.",
+          error: "Could not extract text from this PDF. It may be scanned or image-based. Try using Notes OCR instead.",
           details: parserErr.message,
         });
       }
@@ -321,7 +344,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const quality = isTextReadable(cleanText);
     if (!quality.readable) {
       return res.status(422).json({
-        error: "We couldn't read this document's text properly. Try re-exporting it, or use Notes OCR instead.",
+        error:
+          format === 'pdf'
+            ? "Could not extract text from this PDF. It may be scanned or image-based. Try using Notes OCR instead."
+            : "We couldn't read this document's text properly. Try re-exporting it, or use Notes OCR instead.",
         details: quality.reason,
       });
     }

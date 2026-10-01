@@ -2,6 +2,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { ConceptMapData, StructuredTable, StructuredChart } from '../types/content';
 import { auth } from './firebase';
 import { isTextReadable } from '../utils/textQuality';
+import { extractDocumentOnDevice } from '../utils/clientDocumentExtractor';
 
 /**
  * CampusMind API Client
@@ -252,13 +253,15 @@ export async function getSignedPdfUploadUrl(fileName: string): Promise<{
   );
 }
 
-// 1. Document Extraction (PDF, Word .docx, PowerPoint .pptx, Excel .xlsx, CSV .csv) via backend
+// 1. Document Extraction (PDF, Word .docx, PowerPoint .pptx, Excel .xlsx, CSV .csv) via backend or client
 export async function extractDocumentText(
   storagePath: string,
-  fileName: string
+  fileName: string,
+  localFileUri?: string
 ): Promise<ExtractionResult & { format?: string }> {
-  let data: any;
+  let data: any = null;
 
+  // 1. Primary attempt: Call multi-format /api/extract/document
   try {
     data = await requestBackend<any>(
       '/api/extract/document',
@@ -271,26 +274,56 @@ export async function extractDocumentText(
     );
   } catch (err: any) {
     const errMsg = (err.message || '').toLowerCase();
-    const isPdfFile = /\.pdf$/i.test(fileName);
-    // Only fall back to /api/extract/pdf if the endpoint was not found AND the document is actually a PDF
-    if ((errMsg.includes('not found') || errMsg.includes('404')) && isPdfFile) {
-      data = await requestBackend<any>(
-        '/api/extract/pdf',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ storagePath, fileName }),
-        },
-        'extract PDF text'
-      );
-    } else {
-      throw err;
+    // 2. Fall back to /api/extract/pdf for all document formats if /api/extract/document returns 404
+    if (errMsg.includes('not found') || errMsg.includes('404')) {
+      try {
+        data = await requestBackend<any>(
+          '/api/extract/pdf',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ storagePath, fileName }),
+          },
+          'extract document text'
+        );
+      } catch (fallbackErr: any) {
+        console.warn('[API Document Fallback to /api/extract/pdf failed]:', fallbackErr.message);
+      }
     }
   }
 
-  const text = (data.text || '').trim();
-  const quality = isTextReadable(text);
-  if (!quality.readable) {
+  // 3. If remote backend failed or returned corrupt/unreadable text, fall back to on-device extraction
+  const remoteText = (data?.text || '').trim();
+  const remoteQuality = isTextReadable(remoteText);
+
+  if (!data || !remoteText || !remoteQuality.readable) {
+    if (localFileUri) {
+      try {
+        const localResult = await extractDocumentOnDevice(localFileUri, fileName);
+        return {
+          text: localResult.text,
+          wordCount: localResult.wordCount,
+          title: localResult.title,
+          numPages: localResult.numPages,
+          format: localResult.format,
+        };
+      } catch (localErr: any) {
+        console.warn('[On-Device Document Extraction failed]:', localErr.message);
+        if (/\.pdf$/i.test(fileName)) {
+          throw new Error(
+            'Could not extract text from this PDF. It may be scanned or image-based. Try using Notes OCR instead.'
+          );
+        }
+        throw localErr;
+      }
+    }
+
+    if (/\.pdf$/i.test(fileName)) {
+      throw new Error(
+        'Could not extract text from this PDF. It may be scanned or image-based. Try using Notes OCR instead.'
+      );
+    }
+
     throw new Error(
       "We couldn't read this document's text properly. Try re-exporting it, or use Notes OCR instead."
     );
@@ -299,8 +332,8 @@ export async function extractDocumentText(
   const cleanTitle = fileName.replace(/\.(pdf|docx|pptx|xlsx|csv)$/i, '');
 
   return {
-    text,
-    wordCount: data.wordCount || text.split(/\s+/).filter(Boolean).length,
+    text: remoteText,
+    wordCount: data.wordCount || remoteText.split(/\s+/).filter(Boolean).length,
     title: cleanTitle,
     numPages: data.numPages,
     format: data.format,

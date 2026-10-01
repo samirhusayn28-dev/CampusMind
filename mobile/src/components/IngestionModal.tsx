@@ -520,9 +520,9 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
 
         setPdfUploadProgress(100);
 
-        // 4. Send storagePath to backend for extraction
+        // 4. Send storagePath and localFileUri to ingestion engine
         const userId = user?.uid || 'guest_user';
-        await ingestPdf(storagePath, finalFileName, userId, selectedSubject);
+        await ingestPdf(storagePath, finalFileName, userId, selectedSubject, uploadFileUri);
 
         setPdfUploadProgress(null);
         triggerHaptic('successNotification');
