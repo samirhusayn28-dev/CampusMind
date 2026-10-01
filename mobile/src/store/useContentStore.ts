@@ -75,7 +75,8 @@ interface ContentStoreState {
       subject: string;
       extractedText: string;
       wordCount: number;
-    }
+    },
+    fallbackMaterial?: StudyMaterial
   ) => Promise<StudyMaterial>;
   deleteMaterial: (id: string, userId: string) => Promise<void>;
   cascadeDeleteSubject: (subjectName: string, userId: string) => Promise<number>;
@@ -650,14 +651,21 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
       subject: string;
       extractedText: string;
       wordCount: number;
-    }
+    },
+    fallbackMaterial?: StudyMaterial
   ): Promise<StudyMaterial> => {
     let target = get().materials.find((m) => m.id === materialId);
+    if (!target && get().activeMaterial?.id === materialId) {
+      target = get().activeMaterial || undefined;
+    }
     if (!target) {
       try {
         const cached = await getCachedMaterials();
         target = cached.find((m: StudyMaterial) => m.id === materialId);
       } catch {}
+    }
+    if (!target && fallbackMaterial && fallbackMaterial.id === materialId) {
+      target = fallbackMaterial;
     }
 
     if (!target) {

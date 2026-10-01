@@ -652,54 +652,58 @@ export const ContentSummaryScreen: React.FC<ContentSummaryScreenProps> = (props)
               <StructuredChartRenderer charts={summary.charts} />
             )}
 
-            {/* Quick Actions for Next Stages */}
-            <View style={styles.actionRow}>
-              {onNavigateToQuiz && (
+            {/* Quick Actions for Next Stages: 2x2 responsive grid */}
+            <View style={styles.actionGrid}>
+              <View style={styles.actionGridRow}>
+                {onNavigateToQuiz && (
+                  <TouchableOpacity
+                    style={[styles.toolBtn, { backgroundColor: colors.peachContainer }]}
+                    onPress={onNavigateToQuiz}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="help-circle-outline" size={18} color={colors.peach} />
+                    <Text style={[styles.toolBtnText, { color: colors.peach }]}>Practice Quiz</Text>
+                  </TouchableOpacity>
+                )}
+
+                {onNavigateToChat && (
+                  <TouchableOpacity
+                    style={[styles.toolBtn, { backgroundColor: colors.lavenderContainer }]}
+                    onPress={() => {
+                      if (material?.id) {
+                        useChatStore.getState().setSelectedMaterialId(material.id);
+                      }
+                      onNavigateToChat();
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.lavender} />
+                    <Text style={[styles.toolBtnText, { color: colors.lavender }]}>Study Chat</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <View style={styles.actionGridRow}>
+                {onNavigateToConceptMap && (
+                  <TouchableOpacity
+                    style={[styles.toolBtn, { backgroundColor: colors.skyContainer }]}
+                    onPress={onNavigateToConceptMap}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="git-network-outline" size={18} color={colors.sky} />
+                    <Text style={[styles.toolBtnText, { color: colors.sky }]}>Concept Map</Text>
+                  </TouchableOpacity>
+                )}
+
                 <TouchableOpacity
-                  style={[styles.toolBtn, { backgroundColor: colors.peachContainer }]}
-                  onPress={onNavigateToQuiz}
+                  style={[styles.toolBtn, { backgroundColor: colors.primaryContainer }]}
+                  onPress={() => setIsEditModalVisible(true)}
                   activeOpacity={0.8}
                 >
-                  <Ionicons name="help-circle-outline" size={18} color={colors.peach} />
-                  <Text style={[styles.toolBtnText, { color: colors.peach }]}>Practice Quiz</Text>
+                  <Ionicons name="create-outline" size={18} color={colors.primary} />
+                  <Text style={[styles.toolBtnText, { color: colors.primary }]}>Edit Content</Text>
                 </TouchableOpacity>
-              )}
-
-              {onNavigateToChat && (
-                <TouchableOpacity
-                  style={[styles.toolBtn, { backgroundColor: colors.lavenderContainer }]}
-                  onPress={() => {
-                    if (material?.id) {
-                      useChatStore.getState().setSelectedMaterialId(material.id);
-                    }
-                    onNavigateToChat();
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.lavender} />
-                  <Text style={[styles.toolBtnText, { color: colors.lavender }]}>Study Chat</Text>
-                </TouchableOpacity>
-              )}
-
-              {onNavigateToConceptMap && (
-                <TouchableOpacity
-                  style={[styles.toolBtn, { backgroundColor: colors.skyContainer }]}
-                  onPress={onNavigateToConceptMap}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="git-network-outline" size={18} color={colors.sky} />
-                  <Text style={[styles.toolBtnText, { color: colors.sky }]}>Concept Map</Text>
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity
-                style={[styles.toolBtn, { backgroundColor: colors.primaryContainer }]}
-                onPress={() => setIsEditModalVisible(true)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="create-outline" size={18} color={colors.primary} />
-                <Text style={[styles.toolBtnText, { color: colors.primary }]}>Edit Content</Text>
-              </TouchableOpacity>
+              </View>
             </View>
           </>
         )}
@@ -1026,6 +1030,14 @@ const styles = StyleSheet.create({
     ...typography.presets.bodySmall,
     lineHeight: 20,
   },
+  actionGrid: {
+    gap: spacing.sm,
+    marginVertical: spacing.xs,
+  },
+  actionGridRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
   actionRow: {
     flexDirection: 'row',
     gap: spacing.md,
@@ -1036,12 +1048,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs + 2,
-    height: 46,
+    height: 48,
     borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.sm,
   },
   toolBtnText: {
     ...typography.presets.labelLarge,
     fontSize: 13,
+    fontWeight: '600',
   },
   collapsibleCard: {
     borderRadius: borderRadius.xl,

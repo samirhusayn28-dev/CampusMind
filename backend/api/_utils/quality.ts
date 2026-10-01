@@ -13,21 +13,15 @@ export interface TextQualityResult {
   reason?: string;
 }
 
-// Regex matching acceptable readable characters:
-// - ASCII printable: a-z, A-Z, 0-9
-// - ASCII whitespace: space, tab, newline, carriage return
-// - Common punctuation and typography: . , : ; ! ? ' " ` ~ @ # $ % ^ & * - _ + = / \ | ( ) [ ] { } < > « » “ ” ‘ ’ … — – •
-// - Common math & currency symbols: ± × ÷ = ≠ ≈ ≤ ≥ ° € £ ¥ ₹ ₨
-// - Arabic and Urdu Unicode blocks:
-//   \u0600-\u06FF (Arabic)
-//   \u0750-\u077F (Arabic Supplement)
-//   \u08A0-\u08FF (Arabic Extended-A)
-//   \uFB50-\uFDFF (Arabic Presentation Forms-A)
-//   \uFE70-\uFEFF (Arabic Presentation Forms-B)
-const READABLE_CHAR_REGEX = /^[a-zA-Z0-9\s.,:;!?'"`~@#$%^&*-_+=/\\|()[\]{}<>«»“”‘’…—–•±×÷=≠≈≤≥°€£¥₹₨\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]$/;
+// Regex matching acceptable human-readable characters across all languages:
+// - Letters (\p{L}), Numbers (\p{N}), Punctuation (\p{P}), Symbols (\p{S}), Whitespace (\s)
+const READABLE_CHAR_REGEX = /^[\p{L}\p{N}\p{P}\p{S}\s]$/u;
 
-// Regex matching letter characters (Latin or Arabic/Urdu)
-const LETTER_CHAR_REGEX = /[a-zA-Z\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+// Regex matching alphanumeric characters in any language
+const ALPHANUMERIC_CHAR_REGEX = /[\p{L}\p{N}]/u;
+
+// Recognized markdown structural tokens that are valid in tables/lists/formatting
+const MARKDOWN_TOKEN_REGEX = /^(\|+|-+|\*+|\++|#+|>+|={2,}|_{2,}|:?-+:?)$/;
 
 export function isTextReadable(text: string | null | undefined): TextQualityResult {
   if (!text || typeof text !== 'string') {
@@ -102,19 +96,21 @@ export function isTextReadable(text: string | null | undefined): TextQualityResu
     };
   }
 
-  // 4. Word coherence check: tokens should largely contain letters rather than random symbol strings
-  const words = trimmed.split(/\s+/).filter((w) => w.length >= 2);
+  // 4. Word coherence check: tokens should contain words, numbers, or valid structure tokens rather than binary noise
+  const words = trimmed.split(/\s+/).filter((w) => w.length >= 1);
   if (words.length >= 5) {
-    const coherentWords = words.filter((w) => LETTER_CHAR_REGEX.test(w)).length;
+    const coherentWords = words.filter(
+      (w) => ALPHANUMERIC_CHAR_REGEX.test(w) || MARKDOWN_TOKEN_REGEX.test(w)
+    ).length;
     const wordCoherenceRatio = coherentWords / words.length;
 
-    if (wordCoherenceRatio < 0.40) {
+    if (wordCoherenceRatio < 0.35) {
       return {
         readable: false,
         readableRatio,
         replacementRatio,
         wordCoherenceRatio,
-        reason: `Word coherence ratio (${Math.round(wordCoherenceRatio * 100)}%) is too low; document consists primarily of non-alphabetic symbol clusters.`,
+        reason: `Word coherence ratio (${Math.round(wordCoherenceRatio * 100)}%) is too low; document consists primarily of corrupted symbol clusters.`,
       };
     }
 

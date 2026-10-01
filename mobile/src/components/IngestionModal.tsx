@@ -448,71 +448,91 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
       // 1. Request signed upload URL from backend
       const { signedUrl, storagePath } = await getSignedPdfUploadUrl(finalFileName);
 
-      // 2. Convert local file to Blob
-      let blob: Blob;
-      try {
-        const response = await fetch(file.uri);
-        blob = await response.blob();
-      } catch {
-        // Fallback: read as base64 and create Blob
-        const base64Data = await FileSystem.readAsStringAsync(file.uri, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        const byteCharacters = atob(base64Data);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        blob = new Blob([byteArray], { type: mimeType });
+      // 2. Cache content:// URI locally to ensure continuous binary streaming on Android
+      let uploadFileUri = file.uri;
+      let tempCachedPath: string | null = null;
+      if (uploadFileUri.startsWith('content://')) {
+        tempCachedPath = `${FileSystem.cacheDirectory}doc_upload_${Date.now()}_${finalFileName}`;
+        await FileSystem.copyAsync({ from: uploadFileUri, to: tempCachedPath });
+        uploadFileUri = tempCachedPath;
       }
 
-      // 3. Direct upload to Supabase signed URL using XMLHttpRequest with live clamped progress tracking
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('PUT', signedUrl);
-        xhr.setRequestHeader('Content-Type', mimeType);
-
-        if (xhr.upload) {
-          xhr.upload.onprogress = (event) => {
-            const totalBytes = Math.max(event.total || 0, file.size || 1);
-            if (event.loaded > 0 && totalBytes > 0) {
-              const rawPercent = Math.round((event.loaded / totalBytes) * 100);
-              const progress = Math.min(99, Math.max(0, rawPercent));
-              setPdfUploadProgress(progress);
+      try {
+        // 3. Direct streaming upload using native FileSystem.createUploadTask
+        const uploadTask = FileSystem.createUploadTask(
+          signedUrl,
+          uploadFileUri,
+          {
+            httpMethod: 'PUT',
+            uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+            headers: {
+              'Content-Type': mimeType || 'application/octet-stream',
+              'x-upsert': 'true',
+            },
+          },
+          (progressEvent) => {
+            const total = progressEvent.totalBytesExpectedToSend;
+            const sent = progressEvent.totalBytesSent;
+            if (total > 0 && sent > 0) {
+              const rawPercent = Math.round((sent / total) * 100);
+              setPdfUploadProgress(Math.min(99, Math.max(0, rawPercent)));
             }
-          };
+          }
+        );
+
+        let uploadResult = await uploadTask.uploadAsync();
+
+        // If storage rejected custom MIME type with 400, retry once with application/octet-stream
+        if (
+          uploadResult &&
+          uploadResult.status === 400 &&
+          mimeType !== 'application/octet-stream'
+        ) {
+          console.warn('[Storage Upload] Retrying with application/octet-stream fallback...');
+          const retryTask = FileSystem.createUploadTask(
+            signedUrl,
+            uploadFileUri,
+            {
+              httpMethod: 'PUT',
+              uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+              headers: {
+                'Content-Type': 'application/octet-stream',
+                'x-upsert': 'true',
+              },
+            },
+            (progressEvent) => {
+              const total = progressEvent.totalBytesExpectedToSend;
+              const sent = progressEvent.totalBytesSent;
+              if (total > 0 && sent > 0) {
+                const rawPercent = Math.round((sent / total) * 100);
+                setPdfUploadProgress(Math.min(99, Math.max(0, rawPercent)));
+              }
+            }
+          );
+          uploadResult = await retryTask.uploadAsync();
         }
 
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            setPdfUploadProgress(100);
-            resolve();
-          } else {
-            reject(new Error(`Storage upload failed with status ${xhr.status}`));
-          }
-        };
+        if (!uploadResult || uploadResult.status < 200 || uploadResult.status >= 300) {
+          throw new Error(
+            `Storage upload failed with status ${uploadResult?.status || 'unknown'}`
+          );
+        }
 
-        xhr.onerror = () => {
-          reject(new Error('Network error during file upload. Please check your connection.'));
-        };
+        setPdfUploadProgress(100);
 
-        xhr.ontimeout = () => {
-          reject(new Error('Upload timed out. Please try again.'));
-        };
-        xhr.timeout = 120000;
+        // 4. Send storagePath to backend for extraction
+        const userId = user?.uid || 'guest_user';
+        await ingestPdf(storagePath, finalFileName, userId, selectedSubject);
 
-        xhr.send(blob);
-      });
-
-      // 4. Send storagePath to backend for extraction
-      const userId = user?.uid || 'guest_user';
-      await ingestPdf(storagePath, finalFileName, userId, selectedSubject);
-
-      setPdfUploadProgress(null);
-      triggerHaptic('successNotification');
-      onClose();
-      showThemedToast('success', `"${finalFileName}" processed and saved!`);
+        setPdfUploadProgress(null);
+        triggerHaptic('successNotification');
+        onClose();
+        showThemedToast('success', `"${finalFileName}" processed and saved!`);
+      } finally {
+        if (tempCachedPath) {
+          await FileSystem.deleteAsync(tempCachedPath, { idempotent: true }).catch(() => {});
+        }
+      }
     } catch (err: any) {
       setPdfUploadProgress(null);
       triggerHaptic('errorNotification');
@@ -850,7 +870,7 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
           disabled={isIngesting || isScanningOcr || isConfirmingOcr}
         />
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={styles.keyboardContainer}
         >
           <View

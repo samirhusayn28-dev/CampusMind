@@ -7,10 +7,10 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
-  KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeStore } from '../store/useThemeStore';
@@ -148,12 +148,16 @@ export const EditMaterialModal: React.FC<EditMaterialModalProps> = ({
     triggerHaptic('lightImpact');
 
     try {
-      const updatedMaterial = await updateMaterialContent(material.id, {
-        title: cleanTitle,
-        subject: cleanSubject,
-        extractedText: cleanText,
-        wordCount,
-      });
+      const updatedMaterial = await updateMaterialContent(
+        material.id,
+        {
+          title: cleanTitle,
+          subject: cleanSubject,
+          extractedText: cleanText,
+          wordCount,
+        },
+        material
+      );
 
       triggerHaptic('successNotification');
       showThemedToast('success', `Saved changes to "${cleanTitle}"!`);
@@ -181,7 +185,7 @@ export const EditMaterialModal: React.FC<EditMaterialModalProps> = ({
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         style={[styles.container, { backgroundColor: colors.background }]}
       >
         {/* Header Bar */}

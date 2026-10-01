@@ -58,12 +58,15 @@ export async function checkForAppUpdate(): Promise<AppUpdateInfo> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
+    const timestamp = Date.now();
     const res = await fetch(
-      'https://api.github.com/repos/samirhusayn28-dev/CampusMind/releases/latest',
+      `https://api.github.com/repos/samirhusayn28-dev/CampusMind/releases/latest?_t=${timestamp}`,
       {
         headers: {
           Accept: 'application/vnd.github.v3+json',
           'User-Agent': 'CampusMind-Mobile-App',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
         },
         signal: controller.signal,
       }

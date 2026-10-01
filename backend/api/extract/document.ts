@@ -16,8 +16,10 @@ interface DetectedFormatResult {
 /**
  * Detects the real format of the uploaded file server-side via magic bytes and internal structures.
  */
-async function detectDocumentFormat(buffer: Buffer): Promise<DetectedFormatResult | null> {
+async function detectDocumentFormat(buffer: Buffer, fileName?: string): Promise<DetectedFormatResult | null> {
   if (buffer.length < 4) return null;
+
+  const ext = typeof fileName === 'string' ? fileName.toLowerCase().split('.').pop() : '';
 
   // 1. PDF magic bytes check (%PDF-)
   const headerPreview = buffer.subarray(0, 1024).toString('latin1');
@@ -31,15 +33,20 @@ async function detectDocumentFormat(buffer: Buffer): Promise<DetectedFormatResul
       const zip = await JSZip.loadAsync(buffer);
       const fileNames = Object.keys(zip.files);
 
-      if (fileNames.some((f) => f.startsWith('word/document.xml') || f === 'word/document.xml')) {
+      if (fileNames.some((f) => f.startsWith('word/') || f === 'word/document.xml')) {
         return { format: 'docx', zipInstance: zip };
       }
-      if (fileNames.some((f) => f.startsWith('ppt/presentation.xml') || f.startsWith('ppt/slides/'))) {
+      if (fileNames.some((f) => f.startsWith('ppt/') || f.startsWith('ppt/slides/'))) {
         return { format: 'pptx', zipInstance: zip };
       }
-      if (fileNames.some((f) => f.startsWith('xl/workbook.xml') || f.startsWith('xl/worksheets/'))) {
+      if (fileNames.some((f) => f.startsWith('xl/') || f.startsWith('xl/worksheets/'))) {
         return { format: 'xlsx', zipInstance: zip };
       }
+
+      // If zip internal structure was slightly atypical, use file extension hint
+      if (ext === 'docx') return { format: 'docx', zipInstance: zip };
+      if (ext === 'pptx') return { format: 'pptx', zipInstance: zip };
+      if (ext === 'xlsx') return { format: 'xlsx', zipInstance: zip };
     } catch {
       // Corrupt or non-standard zip
       return null;
@@ -50,6 +57,9 @@ async function detectDocumentFormat(buffer: Buffer): Promise<DetectedFormatResul
   if (!buffer.subarray(0, 4096).includes(0)) {
     const textPreview = buffer.toString('utf8');
     const lines = textPreview.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    if (ext === 'csv') {
+      return { format: 'csv' };
+    }
     if (lines.length >= 1 && (textPreview.includes(',') || textPreview.includes(';') || textPreview.includes('\t'))) {
       return { format: 'csv' };
     }
@@ -167,7 +177,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const buffer = Buffer.from(arrayBuffer);
 
     // 5. Server-side format detection via magic bytes & structural inspection
-    const detected = await detectDocumentFormat(buffer);
+    const detected = await detectDocumentFormat(buffer, fileName);
     if (!detected) {
       return res.status(400).json({
         error: "This file format is not supported or the document is corrupted. Please upload a valid PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), or CSV (.csv) file.",

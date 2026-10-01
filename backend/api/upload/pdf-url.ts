@@ -37,7 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase.storage
       .from('pdfs')
-      .createSignedUploadUrl(relativePath);
+      .createSignedUploadUrl(relativePath, { upsert: true });
 
     if (error || !data) {
       console.error('[Supabase Storage Signed URL Error]:', error);
