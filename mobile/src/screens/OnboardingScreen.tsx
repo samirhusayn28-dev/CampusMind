@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   ScrollView,
   Image,
+  Linking,
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from 'react-native';
@@ -178,18 +179,18 @@ export const OnboardingScreen: React.FC = () => {
         },
       ]}
     >
-      {/* Top Branding Section: StudioXenos Logo & CampusMind */}
+      {/* Top Branding Section: Samir Husayn & GitHub Link */}
       <View style={styles.topHeader}>
-        <View style={styles.brandingBlock}>
-          <Image
-            source={require('../../assets/studioxenos-logo.png')}
-            style={styles.studioLogo}
-            resizeMode="contain"
-          />
-          <Text style={[styles.studioCaption, { color: colors.textSecondary }]}>
-            Designed & Developed By StudioXenos
+        <TouchableOpacity
+          style={styles.brandingBlock}
+          activeOpacity={0.7}
+          onPress={() => Linking.openURL('https://github.com/samirhusayn28-dev')}
+        >
+          <Ionicons name="logo-github" size={15} color={colors.textSecondary} />
+          <Text style={[styles.developerCaption, { color: colors.textSecondary }]}>
+            Designed & Developed By Samir Husayn
           </Text>
-        </View>
+        </TouchableOpacity>
 
         {currentSlideIndex < slides.length - 1 ? (
           <TouchableOpacity
@@ -366,14 +367,11 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xs,
   },
   brandingBlock: {
-    alignItems: 'flex-start',
-    gap: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
-  studioLogo: {
-    width: 36,
-    height: 36,
-  },
-  studioCaption: {
+  developerCaption: {
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.3,

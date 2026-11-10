@@ -7,3 +7,5 @@ dist/
 build/
 .expo/
 *.log
+release-artifacts/
+*.apk

@@ -1,5 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import JSZip from './vendor/jszip';
+import pako from './vendor/pako_inflate';
 import { isTextReadable } from './textQuality';
 import { SupportedDocumentFormat } from './documentValidation';
 
@@ -327,6 +328,150 @@ export async function extractXlsxFromBase64(base64: string): Promise<{ text: str
 }
 
 /**
+ * Decodes PDF string escapes: \n, \r, \t, \\, \(, \), octal codes
+ */
+function decodePdfString(s: string): string {
+  return s
+    .replace(/\\([\\()nrtbf])/g, (_, c) => {
+      if (c === 'n') return '\n';
+      if (c === 'r') return '\r';
+      if (c === 't') return '\t';
+      if (c === 'b') return '\b';
+      if (c === 'f') return '\f';
+      return c;
+    })
+    .replace(/\\([0-7]{1,3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8)));
+}
+
+/**
+ * Parses BT ... ET text objects from an uncompressed PDF content stream
+ */
+function parsePdfTextStream(streamText: string): string {
+  const textPieces: string[] = [];
+  const btRegex = /BT([\s\S]*?)ET/g;
+  let btMatch: RegExpExecArray | null;
+
+  while ((btMatch = btRegex.exec(streamText)) !== null) {
+    const block = btMatch[1];
+
+    // 1. Array strings: [(Hello) 10 (World)] TJ
+    const tjArrayRegex = /\[([\s\S]*?)\]\s*TJ/g;
+    let tjMatch: RegExpExecArray | null;
+    while ((tjMatch = tjArrayRegex.exec(block)) !== null) {
+      const inner = tjMatch[1];
+      const strRegex = /\(((?:[^)\\]|\\.)*)\)/g;
+      let sMatch: RegExpExecArray | null;
+      const linePieces: string[] = [];
+      while ((sMatch = strRegex.exec(inner)) !== null) {
+        linePieces.push(decodePdfString(sMatch[1]));
+      }
+      if (linePieces.length > 0) {
+        textPieces.push(linePieces.join(''));
+      }
+    }
+
+    // 2. Single strings: (Hello World) Tj or ' or "
+    const tjSingleRegex = /\(((?:[^)\\]|\\.)*)\)\s*(?:Tj|'|")/g;
+    let tjSingleMatch: RegExpExecArray | null;
+    while ((tjSingleMatch = tjSingleRegex.exec(block)) !== null) {
+      textPieces.push(decodePdfString(tjSingleMatch[1]));
+    }
+  }
+
+  return textPieces.join(' ');
+}
+
+/**
+ * Extracts plain text from a base64-encoded PDF document on-device.
+ * Decompresses FlateDecode streams using vendored pako and extracts clean text without corrupted characters.
+ */
+export async function extractPdfFromBase64(
+  base64: string
+): Promise<{ text: string; numPages: number }> {
+  const bin = atob(base64);
+  const len = bin.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = bin.charCodeAt(i);
+  }
+
+  const streamMarker = 'stream';
+  const endStreamMarker = 'endstream';
+  let searchPos = 0;
+  const allText: string[] = [];
+
+  const pageMatches = (bin.match(/\/Type\s*\/Page\b/g) || []).length;
+  const numPages = Math.max(1, pageMatches);
+
+  while (searchPos < bin.length) {
+    const streamIdx = bin.indexOf(streamMarker, searchPos);
+    if (streamIdx === -1) break;
+
+    const dictEnd = streamIdx;
+    const dictStart = bin.lastIndexOf('<<', dictEnd);
+    let isFlate = false;
+    if (dictStart !== -1) {
+      const dict = bin.substring(dictStart, dictEnd);
+      if (dict.includes('FlateDecode')) isFlate = true;
+    }
+
+    let byteStart = streamIdx + streamMarker.length;
+    if (bytes[byteStart] === 13) byteStart++;
+    if (bytes[byteStart] === 10) byteStart++;
+
+    const endIdx = bin.indexOf(endStreamMarker, byteStart);
+    if (endIdx === -1) break;
+
+    let byteEnd = endIdx;
+    if (bytes[byteEnd - 1] === 10) byteEnd--;
+    if (bytes[byteEnd - 1] === 13) byteEnd--;
+
+    if (byteEnd > byteStart) {
+      const streamBytes = bytes.subarray(byteStart, byteEnd);
+      let uncompressed = '';
+
+      if (isFlate) {
+        try {
+          const decompressed = pako.inflate(streamBytes);
+          let str = '';
+          const chunkSize = 8192;
+          for (let i = 0; i < decompressed.length; i += chunkSize) {
+            const chunk = decompressed.subarray(i, i + chunkSize);
+            str += String.fromCharCode.apply(null, chunk as any);
+          }
+          uncompressed = str;
+        } catch {
+          // Stream might be image or non-zlib data, skip
+        }
+      } else {
+        let str = '';
+        const chunkSize = 8192;
+        for (let i = 0; i < streamBytes.length; i += chunkSize) {
+          const chunk = streamBytes.subarray(i, i + chunkSize);
+          str += String.fromCharCode.apply(null, chunk as any);
+        }
+        uncompressed = str;
+      }
+
+      if (uncompressed && uncompressed.includes('BT') && uncompressed.includes('ET')) {
+        const parsed = parsePdfTextStream(uncompressed);
+        if (parsed && parsed.trim().length > 0) {
+          allText.push(parsed.trim());
+        }
+      }
+    }
+
+    searchPos = endIdx + endStreamMarker.length;
+  }
+
+  const cleanText = allText.join('\n\n').trim();
+  return {
+    text: cleanText,
+    numPages,
+  };
+}
+
+/**
  * Universal on-device document extractor that operates directly on the local file URI.
  * Guaranteed to succeed without network delays or serverless 404s.
  */
@@ -373,15 +518,27 @@ export async function extractDocumentOnDevice(
     const result = await extractXlsxFromBase64(base64);
     cleanText = result.text;
     numPages = result.numSheets;
+  } else if (format === 'pdf') {
+    const base64 = await FileSystem.readAsStringAsync(fileUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    const result = await extractPdfFromBase64(base64);
+    cleanText = result.text;
+    numPages = result.numPages;
   } else {
     throw new Error(
-      "Could not extract text from this PDF. It may be scanned or image-based. Try using Notes OCR instead."
+      "Could not extract text from this document. Try re-exporting it or using Notes OCR instead."
     );
   }
 
   // Quality check
   const quality = isTextReadable(cleanText);
   if (!quality.readable) {
+    if (format === 'pdf') {
+      throw new Error(
+        'Could not extract text from this PDF. It may be scanned or image-based. Try using Notes OCR instead.'
+      );
+    }
     throw new Error(
       "We couldn't read this document's text properly. Try re-exporting it, or use Notes OCR instead."
     );

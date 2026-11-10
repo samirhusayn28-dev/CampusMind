@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Image,
+  Linking,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -214,17 +214,17 @@ export const ProfileOnboardingScreen: React.FC = () => {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
-          {/* StudioXenos Branding */}
-          <View style={styles.topBranding}>
-            <Image
-              source={require('../../assets/studioxenos-logo.png')}
-              style={styles.studioLogo}
-              resizeMode="contain"
-            />
-            <Text style={[styles.studioCaption, { color: colors.textSecondary }]}>
-              Designed & Developed By StudioXenos
+          {/* Samir Husayn Branding */}
+          <TouchableOpacity
+            style={styles.topBranding}
+            activeOpacity={0.7}
+            onPress={() => Linking.openURL('https://github.com/samirhusayn28-dev')}
+          >
+            <Ionicons name="logo-github" size={15} color={colors.textSecondary} />
+            <Text style={[styles.developerCaption, { color: colors.textSecondary }]}>
+              Designed & Developed By Samir Husayn
             </Text>
-          </View>
+          </TouchableOpacity>
 
           {/* Welcome Header */}
           <View style={styles.header}>
@@ -514,14 +514,10 @@ const styles = StyleSheet.create({
   topBranding: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: 6,
     marginBottom: spacing.md,
   },
-  studioLogo: {
-    width: 24,
-    height: 24,
-  },
-  studioCaption: {
+  developerCaption: {
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.3,

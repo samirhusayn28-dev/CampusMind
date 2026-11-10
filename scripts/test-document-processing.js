@@ -528,9 +528,84 @@ const binaryGarbage = 'Ù9ÃØ§12â?§â??Ù?Ù?Ã¥Ã« Ù8Ã9Ã? Â©';
 const garbageQuality = backendIsTextReadable(binaryGarbage);
 assert(garbageQuality.readable === false, 'Binary stream garbage string rejected with high non-printable ratio');
 
+// ---------------------------------------------------------------------
+// TEST 8: On-Device Client PDF FlateDecode Extraction (Zero-Dependency Fallback)
+// ---------------------------------------------------------------------
+console.log('\n--- TEST 8: On-Device Client PDF Extraction ---');
+const clientPako = (await import('../backend/node_modules/pako/dist/pako_inflate.js')).default;
+
+function testClientExtractPdf(pdfBuffer) {
+  const bin = pdfBuffer.toString('latin1');
+  const len = bin.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+
+  const streamMarker = 'stream';
+  const endStreamMarker = 'endstream';
+  let searchPos = 0;
+  const allText = [];
+
+  while (searchPos < bin.length) {
+    const streamIdx = bin.indexOf(streamMarker, searchPos);
+    if (streamIdx === -1) break;
+
+    const dictEnd = streamIdx;
+    const dictStart = bin.lastIndexOf('<<', dictEnd);
+    let isFlate = false;
+    if (dictStart !== -1) {
+      const dict = bin.substring(dictStart, dictEnd);
+      if (dict.includes('FlateDecode')) isFlate = true;
+    }
+
+    let byteStart = streamIdx + streamMarker.length;
+    if (bytes[byteStart] === 13) byteStart++;
+    if (bytes[byteStart] === 10) byteStart++;
+
+    const endIdx = bin.indexOf(endStreamMarker, byteStart);
+    if (endIdx === -1) break;
+
+    let byteEnd = endIdx;
+    if (bytes[byteEnd - 1] === 10) byteEnd--;
+    if (bytes[byteEnd - 1] === 13) byteEnd--;
+
+    if (byteEnd > byteStart) {
+      const streamBytes = bytes.subarray(byteStart, byteEnd);
+      let uncompressed = '';
+      if (isFlate) {
+        try {
+          const decompressed = clientPako.inflate(streamBytes);
+          uncompressed = Buffer.from(decompressed).toString('latin1');
+        } catch {}
+      } else {
+        uncompressed = Buffer.from(streamBytes).toString('latin1');
+      }
+
+      if (uncompressed && uncompressed.includes('BT') && uncompressed.includes('ET')) {
+        const btRegex = /BT([\s\S]*?)ET/g;
+        let btMatch;
+        while ((btMatch = btRegex.exec(uncompressed)) !== null) {
+          const block = btMatch[1];
+          const tjSingleRegex = /\(((?:[^)\\]|\\.)*)\)\s*(?:Tj|'|")/g;
+          let m;
+          while ((m = tjSingleRegex.exec(block)) !== null) {
+            allText.push(m[1]);
+          }
+        }
+      }
+    }
+    searchPos = endIdx + endStreamMarker.length;
+  }
+  return allText.join(' ').trim();
+}
+
+const clientPdfText = testClientExtractPdf(compressedPdf);
+assert(clientPdfText.includes('Advanced Artificial Intelligence and Machine Learning Lecture Notes'), 'On-device PDF parser decompressed and extracted text successfully');
+const clientQuality = backendIsTextReadable(clientPdfText);
+assert(clientQuality.readable === true, 'On-device PDF extracted text passes quality assessment');
+
 console.log('\n====================================================');
 if (allPassed) {
-  console.log('  🎉 ALL 7 DOCUMENT PROCESSING TESTS PASSED!');
+  console.log('  🎉 ALL 8 DOCUMENT PROCESSING TESTS PASSED!');
   console.log('====================================================\n');
   process.exit(0);
 } else {

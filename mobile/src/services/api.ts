@@ -261,21 +261,20 @@ export async function extractDocumentText(
 ): Promise<ExtractionResult & { format?: string }> {
   let data: any = null;
 
-  // 1. Primary attempt: Call multi-format /api/extract/document
-  try {
-    data = await requestBackend<any>(
-      '/api/extract/document',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storagePath, fileName }),
-      },
-      'extract document text'
-    );
-  } catch (err: any) {
-    const errMsg = (err.message || '').toLowerCase();
-    // 2. Fall back to /api/extract/pdf for all document formats if /api/extract/document returns 404
-    if (errMsg.includes('not found') || errMsg.includes('404')) {
+  // 1. If storagePath is provided, attempt remote backend extraction
+  if (storagePath && storagePath.trim().length > 0) {
+    try {
+      data = await requestBackend<any>(
+        '/api/extract/document',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storagePath, fileName }),
+        },
+        'extract document text'
+      );
+    } catch (err: any) {
+      // Fall back to /api/extract/pdf for all document formats
       try {
         data = await requestBackend<any>(
           '/api/extract/pdf',
@@ -292,7 +291,7 @@ export async function extractDocumentText(
     }
   }
 
-  // 3. If remote backend failed or returned corrupt/unreadable text, fall back to on-device extraction
+  // 2. If remote backend failed or returned corrupt/unreadable text, fall back to on-device extraction
   const remoteText = (data?.text || '').trim();
   const remoteQuality = isTextReadable(remoteText);
 

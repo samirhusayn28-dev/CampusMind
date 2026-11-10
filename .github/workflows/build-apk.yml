@@ -147,13 +147,11 @@ jobs:
 
             Download and install the standalone **CampusMind Universal Android APK** directly onto your phone without needing Expo Go or any local developer setup.
 
-            ### 🚀 What's New in v1.4.1:
-            - **Multi-Format Document Upload & Extraction:** Full production support for PDF (.pdf), Word (.docx), PowerPoint (.pptx), Excel (.xlsx), and CSV (.csv) up to 25MB with binary magic byte validation, structured markdown headings, slide sequencing, and responsive tables.
-            - **Firebase Account Deletion with Google Reauthentication:** Safe, permanent account deletion requiring exact username confirmation and mandatory Google reauthentication prior to any destructive operation, preventing partial deletion and cleanly wiping user data, cloud files, and auth credentials.
-            - **In-App Resource Content Editor:** In-place study resource updates preserving document ID, subject, and title without 404 export errors, with full Markdown list and table formatting.
-            - **Mobile Keyboard Content Accessibility:** Configured `softwareKeyboardLayoutMode: resize` and managed ScrollView tap handling to eliminate keyboard occlusion across Android devices.
-            - **Dynamic Semantic Update Checker:** Real-time update checks sourced directly from app configuration with numerical semantic comparison.
-            - **Custom Themed Confirmation Modals:** Full Material You dialogs replacing native Android alerts for subject deletion and account deletion.
+            ### 🚀 What's New in v1.4.3:
+            - **Developer Profile & Branding:** Rebranded application developer credentials to Samir Husayn with interactive GitHub repository links (github.com/samirhusayn28-dev) and direct developer email communication (sameerhussainsoomro22@gmail.com).
+            - **Robust Multi-Format Document Ingestion:** Production support across PDF (.pdf), Word (.docx), PowerPoint (.pptx), Excel (.xlsx), and CSV (.csv) with resilient on-device parsing fallback and zero upload interruption.
+            - **FlateDecode PDF Text Extraction:** Solved PDF stream decompression to eliminate garbled binary characters, non-printable encoding artifacts, and corrupted stream parsing.
+            - **Keystore & Build Tooling:** ES module syntax compliance for automated release keystore generation and Android APK compilation.
 
             ### ✨ Core Features:
             - **Material You Aesthetic:** Soft pastel palette, cozy warm charcoal dark mode, rounded Plus Jakarta Sans typography, and fluid micro-interactions.

@@ -69,13 +69,8 @@ export default function App() {
             ]}
           >
             <View style={styles.splashTopCredit}>
-              <Image
-                source={require('./assets/studioxenos-logo.png')}
-                style={styles.splashBrandLogo}
-                resizeMode="contain"
-              />
               <Text style={[styles.splashBrandCaption, { color: isDark ? '#A0A49E' : '#737871' }]}>
-                Designed & Developed By StudioXenos
+                Designed & Developed By Samir Husayn
               </Text>
             </View>
 

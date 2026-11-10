@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   Switch,
   ActivityIndicator,
-  Image,
+  Linking,
   Modal,
   TextInput,
   Platform,
@@ -658,15 +658,39 @@ export const SettingsScreen: React.FC = () => {
             <Text style={[styles.developedByLabel, { color: colors.textSecondary }]}>
               Designed & Developed By
             </Text>
-            <View style={styles.studioRow}>
-              <Image
-                source={require('../../assets/studioxenos-logo.png')}
-                style={styles.studioLogo}
-                resizeMode="contain"
-              />
-              <Text style={[styles.studioName, { color: colors.textPrimary }]}>
-                StudioXenos
+            <View style={styles.developerHeaderRow}>
+              <View style={[styles.developerAvatar, { backgroundColor: colors.primary }]}>
+                <Ionicons name="code-slash" size={18} color="#FFFFFF" />
+              </View>
+              <Text style={[styles.developerName, { color: colors.textPrimary }]}>
+                Samir Husayn
               </Text>
+            </View>
+
+            <View style={styles.developerContactList}>
+              <TouchableOpacity
+                style={[styles.contactRow, { backgroundColor: colors.surfaceSubtle }]}
+                activeOpacity={0.7}
+                onPress={() => Linking.openURL('https://github.com/samirhusayn28-dev')}
+              >
+                <Ionicons name="logo-github" size={18} color={colors.textPrimary} />
+                <Text style={[styles.contactText, { color: colors.textPrimary }]} numberOfLines={1}>
+                  https://github.com/samirhusayn28-dev
+                </Text>
+                <Ionicons name="open-outline" size={14} color={colors.textSecondary} style={styles.contactChevron} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.contactRow, { backgroundColor: colors.surfaceSubtle }]}
+                activeOpacity={0.7}
+                onPress={() => Linking.openURL('mailto:sameerhussainsoomro22@gmail.com')}
+              >
+                <Ionicons name="mail-outline" size={18} color={colors.primary} />
+                <Text style={[styles.contactText, { color: colors.textPrimary }]} numberOfLines={1}>
+                  sameerhussainsoomro22@gmail.com
+                </Text>
+                <Ionicons name="open-outline" size={14} color={colors.textSecondary} style={styles.contactChevron} />
+              </TouchableOpacity>
             </View>
           </View>
         </Card>
@@ -1076,7 +1100,8 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   developerBrandingBlock: {
-    gap: 6,
+    gap: spacing.sm,
+    marginTop: spacing.xs,
   },
   developedByLabel: {
     fontSize: 11,
@@ -1084,18 +1109,41 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
-  studioRow: {
+  developerHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
-  studioLogo: {
+  developerAvatar: {
     width: 32,
     height: 32,
+    borderRadius: borderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  studioName: {
+  developerName: {
     ...typography.presets.titleMedium,
     fontWeight: '700',
     letterSpacing: 0.3,
+  },
+  developerContactList: {
+    gap: spacing.xs,
+    marginTop: 4,
+  },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: borderRadius.md,
+  },
+  contactText: {
+    ...typography.presets.bodySmall,
+    fontWeight: '500',
+    flex: 1,
+  },
+  contactChevron: {
+    marginLeft: 'auto',
   },
 });

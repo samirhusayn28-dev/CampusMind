@@ -175,7 +175,7 @@ export const useContentStore = create<ContentStoreState>((set, get) => ({
         title: result.title || fileName,
         type: 'pdf',
         originalFileName: fileName,
-        storagePath,
+        storagePath: storagePath || undefined,
         extractedText: result.text,
         wordCount: result.wordCount,
         subject,

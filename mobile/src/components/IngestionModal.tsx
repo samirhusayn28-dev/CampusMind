@@ -445,10 +445,7 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
       const mimeType = detected.mimeType;
       const finalFileName = detected.normalizedFileName;
 
-      // 1. Request signed upload URL from backend
-      const { signedUrl, storagePath } = await getSignedPdfUploadUrl(finalFileName);
-
-      // 2. Cache content:// URI locally to ensure continuous binary streaming on Android
+      // 1. Cache content:// URI locally to ensure continuous binary streaming & on-device extraction on Android
       let uploadFileUri = file.uri;
       let tempCachedPath: string | null = null;
       if (uploadFileUri.startsWith('content://')) {
@@ -458,77 +455,95 @@ export const IngestionModal: React.FC<IngestionModalProps> = ({
       }
 
       try {
-        // 3. Direct streaming upload using native FileSystem.createUploadTask
-        const uploadTask = FileSystem.createUploadTask(
-          signedUrl,
-          uploadFileUri,
-          {
-            httpMethod: 'PUT',
-            uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-            headers: {
-              'Content-Type': mimeType || 'application/octet-stream',
-              'x-upsert': 'true',
-            },
-          },
-          (progressEvent) => {
-            const total = progressEvent.totalBytesExpectedToSend;
-            const sent = progressEvent.totalBytesSent;
-            if (total > 0 && sent > 0) {
-              const rawPercent = Math.round((sent / total) * 100);
-              setPdfUploadProgress(Math.min(99, Math.max(0, rawPercent)));
+        let storagePath: string | undefined = undefined;
+
+        // 2. Attempt remote storage upload in parallel with progress, but gracefully tolerate storage upload failures
+        try {
+          setPdfUploadProgress(10);
+          const signedUrlData = await getSignedPdfUploadUrl(finalFileName);
+          if (signedUrlData?.signedUrl) {
+            let targetUploadUrl = signedUrlData.signedUrl;
+            // Ensure absolute URL if Supabase returns a relative path
+            if (targetUploadUrl.startsWith('/')) {
+              const baseSupabase = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://campusmind.supabase.co';
+              targetUploadUrl = `${baseSupabase}${targetUploadUrl}`;
+            }
+
+            const uploadTask = FileSystem.createUploadTask(
+              targetUploadUrl,
+              uploadFileUri,
+              {
+                httpMethod: 'PUT',
+                uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+                headers: {
+                  'Content-Type': mimeType || 'application/octet-stream',
+                  'x-upsert': 'true',
+                },
+              },
+              (progressEvent) => {
+                const total = progressEvent.totalBytesExpectedToSend;
+                const sent = progressEvent.totalBytesSent;
+                if (total > 0 && sent > 0) {
+                  const rawPercent = Math.round((sent / total) * 100);
+                  setPdfUploadProgress(Math.min(85, Math.max(10, rawPercent)));
+                }
+              }
+            );
+
+            let uploadResult = await uploadTask.uploadAsync();
+
+            // If storage rejected custom MIME type with 400, retry once with application/octet-stream
+            if (
+              uploadResult &&
+              uploadResult.status === 400 &&
+              mimeType !== 'application/octet-stream'
+            ) {
+              console.warn('[Storage Upload] Retrying with application/octet-stream fallback...');
+              const retryTask = FileSystem.createUploadTask(
+                targetUploadUrl,
+                uploadFileUri,
+                {
+                  httpMethod: 'PUT',
+                  uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+                  headers: {
+                    'Content-Type': 'application/octet-stream',
+                    'x-upsert': 'true',
+                  },
+                },
+                (progressEvent) => {
+                  const total = progressEvent.totalBytesExpectedToSend;
+                  const sent = progressEvent.totalBytesSent;
+                  if (total > 0 && sent > 0) {
+                    const rawPercent = Math.round((sent / total) * 100);
+                    setPdfUploadProgress(Math.min(85, Math.max(10, rawPercent)));
+                  }
+                }
+              );
+              uploadResult = await retryTask.uploadAsync();
+            }
+
+            if (uploadResult && uploadResult.status >= 200 && uploadResult.status < 300) {
+              storagePath = signedUrlData.storagePath;
+            } else {
+              console.warn('[Storage Upload Warning] Remote storage status:', uploadResult?.status);
             }
           }
-        );
-
-        let uploadResult = await uploadTask.uploadAsync();
-
-        // If storage rejected custom MIME type with 400, retry once with application/octet-stream
-        if (
-          uploadResult &&
-          uploadResult.status === 400 &&
-          mimeType !== 'application/octet-stream'
-        ) {
-          console.warn('[Storage Upload] Retrying with application/octet-stream fallback...');
-          const retryTask = FileSystem.createUploadTask(
-            signedUrl,
-            uploadFileUri,
-            {
-              httpMethod: 'PUT',
-              uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-              headers: {
-                'Content-Type': 'application/octet-stream',
-                'x-upsert': 'true',
-              },
-            },
-            (progressEvent) => {
-              const total = progressEvent.totalBytesExpectedToSend;
-              const sent = progressEvent.totalBytesSent;
-              if (total > 0 && sent > 0) {
-                const rawPercent = Math.round((sent / total) * 100);
-                setPdfUploadProgress(Math.min(99, Math.max(0, rawPercent)));
-              }
-            }
-          );
-          uploadResult = await retryTask.uploadAsync();
+        } catch (uploadErr: any) {
+          console.warn('[Storage Upload Fallback] Proceeding with on-device document extraction:', uploadErr.message);
         }
 
-        if (!uploadResult || uploadResult.status < 200 || uploadResult.status >= 300) {
-          throw new Error(
-            `Storage upload failed with status ${uploadResult?.status || 'unknown'}`
-          );
-        }
+        setPdfUploadProgress(90);
+
+        // 3. Process and extract document text (backend if storagePath available, or on-device via localFileUri)
+        const userId = user?.uid || 'guest_user';
+        await ingestPdf(storagePath || '', finalFileName, userId, selectedSubject, uploadFileUri);
 
         setPdfUploadProgress(100);
-
-        // 4. Send storagePath and localFileUri to ingestion engine
-        const userId = user?.uid || 'guest_user';
-        await ingestPdf(storagePath, finalFileName, userId, selectedSubject, uploadFileUri);
-
-        setPdfUploadProgress(null);
         triggerHaptic('successNotification');
         onClose();
         showThemedToast('success', `"${finalFileName}" processed and saved!`);
       } finally {
+        setPdfUploadProgress(null);
         if (tempCachedPath) {
           await FileSystem.deleteAsync(tempCachedPath, { idempotent: true }).catch(() => {});
         }
