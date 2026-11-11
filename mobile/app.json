@@ -2,7 +2,7 @@
   "expo": {
     "name": "CampusMind",
     "slug": "campusmind",
-    "version": "1.4.4",
+    "version": "1.4.5",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "campusmind",
@@ -24,7 +24,7 @@
     },
     "android": {
       "package": "com.campusmind.app",
-      "versionCode": 19,
+      "versionCode": 20,
       "adaptiveIcon": {
         "backgroundColor": "#355C4D",
         "foregroundImage": "./assets/android-icon-foreground.png",

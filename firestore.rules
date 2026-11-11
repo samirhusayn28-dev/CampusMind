@@ -13,8 +13,10 @@ service cloud.firestore {
 
     // User document and all nested collections
     match /users/{userId} {
-      // User profile document
-      allow read, write: if isOwner(userId);
+      // User profile document: authenticated users can read (for username lookup and profile discovery)
+      // Only the owner can write to their own profile
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
 
       // User's enrolled courses and subjects
       match /courses/{courseId} {

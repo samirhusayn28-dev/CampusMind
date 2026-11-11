@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 // @ts-ignore - getReactNativePersistence is available in react-native entry
-import { initializeAuth, getReactNativePersistence, getAuth, GoogleAuthProvider, signInWithCredential, signInAnonymously, signOut, onAuthStateChanged, User, deleteUser, reauthenticateWithCredential } from 'firebase/auth';
+import { initializeAuth, getReactNativePersistence, getAuth, GoogleAuthProvider, signInWithCredential, signInAnonymously, signOut, onAuthStateChanged, User, deleteUser, reauthenticateWithCredential, getAdditionalUserInfo } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, serverTimestamp, collection, query, where, getDocs, limit, deleteDoc } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
@@ -151,8 +151,19 @@ export async function signInWithGoogleNative(): Promise<UserProfile> {
     const userCredential = await signInWithCredential(auth, credential);
     const firebaseUser = userCredential.user;
 
+    // Detect if this is an existing user or newly registered user
+    let isNewUser: boolean | undefined = undefined;
+    try {
+      const additionalInfo = getAdditionalUserInfo(userCredential);
+      if (additionalInfo && typeof additionalInfo.isNewUser === 'boolean') {
+        isNewUser = additionalInfo.isNewUser;
+      }
+    } catch (infoErr) {
+      console.warn('[GoogleAuth] Could not check additional user info:', infoErr);
+    }
+
     // Sync user data to Firestore
-    const profile = await syncUserProfileToFirestore(firebaseUser);
+    const profile = await syncUserProfileToFirestore(firebaseUser, isNewUser);
     return profile;
   } catch (error: any) {
     // Log full error details to console
@@ -285,16 +296,33 @@ export async function completeUserProfileOnboarding(
   }
 ): Promise<UserProfile> {
   const userRef = doc(db, 'users', uid);
-  const docSnap = await getDoc(userRef);
-  const existing = docSnap.exists() ? (docSnap.data() as Partial<UserProfile>) : {};
+  let existing: Partial<UserProfile> = {};
+
+  try {
+    const docSnap = await getDoc(userRef);
+    if (docSnap.exists()) {
+      existing = docSnap.data() as Partial<UserProfile>;
+    }
+  } catch (readErr) {
+    console.warn('[Firestore] Could not fetch existing profile during onboarding completion:', readErr);
+  }
+
+  // Fallback to local storage if Firestore read was unavailable
+  try {
+    const cached = await AsyncStorage.getItem(`@campusmind_user_profile_${uid}`);
+    if (cached) {
+      existing = { ...JSON.parse(cached), ...existing };
+    }
+  } catch {}
 
   const cleanUsername = data.username.trim().toLowerCase().replace(/^@/, '');
+  const currentUser = auth.currentUser;
 
   const updatedProfile: UserProfile = {
     uid,
-    displayName: existing.displayName || cleanUsername,
-    email: existing.email || null,
-    photoURL: existing.photoURL || null,
+    displayName: existing.displayName || currentUser?.displayName || cleanUsername,
+    email: existing.email || currentUser?.email || null,
+    photoURL: existing.photoURL || currentUser?.photoURL || null,
     university: existing.university || 'University Student',
     major: existing.major || 'Academic Studies',
     studyStreak: existing.studyStreak || 1,
@@ -316,10 +344,27 @@ export async function completeUserProfileOnboarding(
     customSubjects: existing.customSubjects || [],
   };
 
+  // 1. Immediately persist locally so the user is NEVER locked out or starts freshly
   try {
-    await setDoc(userRef, updatedProfile, { merge: true });
+    await AsyncStorage.setItem(`@campusmind_user_profile_${uid}`, JSON.stringify(updatedProfile));
+    await AsyncStorage.setItem(`@campusmind_onboarded_${uid}`, 'true');
+    await AsyncStorage.setItem('@campusmind_onboarding_completed_v1', 'true');
+  } catch (storageErr) {
+    console.warn('[Storage] Could not cache onboarding profile:', storageErr);
+  }
+
+  // 2. Persist to Firestore (in background, non-blocking if permission or network is pending)
+  try {
+    await setDoc(
+      userRef,
+      {
+        ...updatedProfile,
+        lastLoginAtServer: serverTimestamp(),
+      },
+      { merge: true }
+    );
   } catch (err) {
-    console.error('[Firestore] Failed to save onboarding profile to Firestore:', err);
+    console.warn('[Firestore] Could not save onboarding profile to Firestore (saved locally):', err);
   }
 
   return updatedProfile;
@@ -371,49 +416,86 @@ export async function signInAsGuest(name: string = 'Campus Student'): Promise<Us
 }
 
 // Sync Firebase User profile to Firestore
-export async function syncUserProfileToFirestore(user: User): Promise<UserProfile> {
+export async function syncUserProfileToFirestore(user: User, isNewUserHint?: boolean): Promise<UserProfile> {
   const userRef = doc(db, 'users', user.uid);
   let existingProfile: Partial<UserProfile> = {};
-  let fetchError: any = null;
+  let serverDocExists = false;
 
   try {
     const docSnap = await getDoc(userRef);
     if (docSnap.exists()) {
+      serverDocExists = true;
       existingProfile = docSnap.data() as Partial<UserProfile>;
     }
   } catch (err: any) {
-    fetchError = err;
     console.warn('[Firestore] Could not fetch existing profile from server:', err);
-    // Try restoring profile from AsyncStorage local cache
-    try {
-      const cached = await AsyncStorage.getItem(`@campusmind_user_profile_${user.uid}`);
-      if (cached) {
-        existingProfile = JSON.parse(cached);
-        fetchError = null;
-      }
-    } catch {}
   }
 
-  const isOnboarded = Boolean(existingProfile.isOnboarded || existingProfile.username);
+  // Fallback to local cache if Firestore read failed or document is missing local fields
+  try {
+    const cached = await AsyncStorage.getItem(`@campusmind_user_profile_${user.uid}`);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      existingProfile = { ...parsed, ...existingProfile };
+    }
+  } catch {}
+
+  // Check if profile was previously marked onboarded locally
+  const localOnboardedFlag = await AsyncStorage.getItem(`@campusmind_onboarded_${user.uid}`).catch(() => null);
+
+  // Determine if this user account already existed previously:
+  // 1. Explicitly recorded as onboarded in Firestore or locally
+  // 2. Already has a username set
+  // 3. Document already exists on server with profile information
+  // 4. Returning Google user indicated by isNewUserHint === false
+  // 5. Auth metadata shows account was created earlier than this session
+  const isOlderAuthAccount = Boolean(
+    user.metadata.creationTime &&
+    user.metadata.lastSignInTime &&
+    Math.abs(new Date(user.metadata.lastSignInTime).getTime() - new Date(user.metadata.creationTime).getTime()) > 15000
+  );
+
+  const isExistingAccount = Boolean(
+    existingProfile.isOnboarded ||
+    existingProfile.username ||
+    existingProfile.educationLevel ||
+    localOnboardedFlag === 'true' ||
+    serverDocExists ||
+    (isNewUserHint === false) ||
+    isOlderAuthAccount
+  );
+
+  const cleanUsername = existingProfile.username ||
+    (isExistingAccount
+      ? (user.displayName || user.email?.split('@')[0] || 'student')
+          .toLowerCase()
+          .replace(/[^a-z0-9_]/g, '')
+          .slice(0, 20) || 'student'
+      : undefined);
+
+  const isOnboarded = Boolean(
+    existingProfile.isOnboarded ||
+    (isExistingAccount && cleanUsername)
+  );
 
   const profileData: UserProfile = {
     uid: user.uid,
-    displayName: user.displayName || existingProfile.displayName || (existingProfile.username ? `@${existingProfile.username}` : 'Campus Student'),
+    displayName: user.displayName || existingProfile.displayName || (cleanUsername ? `@${cleanUsername}` : 'Campus Student'),
     email: user.email || existingProfile.email || null,
     photoURL: user.photoURL || existingProfile.photoURL || null,
     university: existingProfile.university || 'University Student',
     major: existingProfile.major || 'General Studies',
     studyStreak: existingProfile.studyStreak || 0,
     longestStreak: existingProfile.longestStreak || 0,
-    createdAt: existingProfile.createdAt || new Date().toISOString(),
+    createdAt: existingProfile.createdAt || user.metadata.creationTime || new Date().toISOString(),
     lastLoginAt: new Date().toISOString(),
     hasCompletedOnboarding: existingProfile.hasCompletedOnboarding ?? true,
     isOnboarded,
     isAnonymous: user.isAnonymous,
-    username: existingProfile.username,
+    username: cleanUsername,
     age: existingProfile.age,
     gender: existingProfile.gender,
-    educationLevel: existingProfile.educationLevel,
+    educationLevel: existingProfile.educationLevel || (isOnboarded ? 'Bachelors' : undefined),
     totalStudyTimeMinutes: existingProfile.totalStudyTimeMinutes || 0,
     quizzesTaken: existingProfile.quizzesTaken || 0,
     averageQuizScore: existingProfile.averageQuizScore || 0,
@@ -422,6 +504,16 @@ export async function syncUserProfileToFirestore(user: User): Promise<UserProfil
     customSubjects: existingProfile.customSubjects || [],
   };
 
+  // Cache locally immediately so returning to the app always remembers state
+  try {
+    await AsyncStorage.setItem(`@campusmind_user_profile_${user.uid}`, JSON.stringify(profileData));
+    if (isOnboarded) {
+      await AsyncStorage.setItem(`@campusmind_onboarded_${user.uid}`, 'true');
+      await AsyncStorage.setItem('@campusmind_onboarding_completed_v1', 'true');
+    }
+  } catch {}
+
+  // Attempt syncing to Firestore
   try {
     await setDoc(
       userRef,
@@ -431,9 +523,8 @@ export async function syncUserProfileToFirestore(user: User): Promise<UserProfil
       },
       { merge: true }
     );
-    AsyncStorage.setItem(`@campusmind_user_profile_${user.uid}`, JSON.stringify(profileData)).catch(() => {});
   } catch (err) {
-    console.warn('[Firestore] Error saving user profile:', err);
+    console.warn('[Firestore] Error saving user profile to cloud (saved locally):', err);
   }
 
   return profileData;
