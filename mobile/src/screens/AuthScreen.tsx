@@ -27,6 +27,10 @@ export const AuthScreen: React.FC = () => {
     try {
       await signInWithGoogle();
     } catch (err: any) {
+      if (err?.message === 'Google Sign-In was cancelled.') {
+        clearError();
+        return;
+      }
       showThemedAlert(
         'Google Sign-In',
         err.message || 'Unable to complete Google Sign-In at this moment.',

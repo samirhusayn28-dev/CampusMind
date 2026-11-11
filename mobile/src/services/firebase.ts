@@ -100,7 +100,7 @@ export function configureGoogleSignIn(): void {
     GoogleSignin.configure({
       webClientId: GOOGLE_CONFIG.webClientId,
       iosClientId: GOOGLE_CONFIG.iosClientId,
-      offlineAccess: true,
+      offlineAccess: false,
       scopes: ['profile', 'email'],
     });
     isGoogleSigninConfigured = true;
@@ -119,12 +119,31 @@ export async function signInWithGoogleNative(): Promise<UserProfile> {
     
     // Trigger native sign-in dialog
     const response = await GoogleSignin.signIn();
+
+    // Check if user cancelled sign-in prompt (v16 returns { type: 'cancelled', data: null })
+    if ((response as any)?.type === 'cancelled') {
+      throw new Error('Google Sign-In was cancelled.');
+    }
     
     // In newer versions of @react-native-google-signin/google-signin, response structure is response.data
-    const idToken = (response as any)?.data?.idToken || (response as any)?.idToken;
+    let idToken = (response as any)?.data?.idToken || (response as any)?.idToken;
+
+    // Fallback: If idToken is not in sign-in response, attempt explicit retrieval via getTokens()
+    if (!idToken && typeof GoogleSignin?.getTokens === 'function') {
+      try {
+        const tokens = await GoogleSignin.getTokens();
+        if (tokens?.idToken) {
+          idToken = tokens.idToken;
+        }
+      } catch (tokenErr) {
+        console.warn('[GoogleAuth] getTokens() fallback failed:', tokenErr);
+      }
+    }
 
     if (!idToken) {
-      throw new Error('Google Sign-In failed. Please check your internet connection and try again.');
+      throw new Error(
+        'Google Sign-In succeeded, but no ID token was returned by Google Play Services. Please verify that the APK signing SHA-1 fingerprint is registered in Firebase Console.'
+      );
     }
 
     // Exchange Google ID Token with Firebase
@@ -136,7 +155,7 @@ export async function signInWithGoogleNative(): Promise<UserProfile> {
     const profile = await syncUserProfileToFirestore(firebaseUser);
     return profile;
   } catch (error: any) {
-    // Log full error details to console only (never in UI)
+    // Log full error details to console
     console.error('[GoogleAuth Error]', {
       code: error?.code,
       message: error?.message,
@@ -145,7 +164,8 @@ export async function signInWithGoogleNative(): Promise<UserProfile> {
     });
 
     const code = String(error?.code || '');
-    const msg = String(error?.message || '').toLowerCase();
+    const rawMsg = String(error?.message || '');
+    const msg = rawMsg.toLowerCase();
 
     // 1. User cancelled
     if (
@@ -171,23 +191,23 @@ export async function signInWithGoogleNative(): Promise<UserProfile> {
     if (
       code === statusCodes?.PLAY_SERVICES_NOT_AVAILABLE ||
       code === 'PLAY_SERVICES_NOT_AVAILABLE' ||
-      code === '12500' ||
-      msg.includes('play services')
+      msg.includes('play services not available')
     ) {
       throw new Error('Google Play Services is not available or needs to be updated on your device.');
     }
 
-    // 4. Configuration error (DEVELOPER_ERROR)
+    // 4. Configuration error (DEVELOPER_ERROR / Code 10)
     if (
-      code === statusCodes?.DEVELOPER_ERROR ||
-      code === 'DEVELOPER_ERROR' ||
       code === '10' ||
+      code === 'DEVELOPER_ERROR' ||
       msg.includes('developer_error')
     ) {
       console.error(
         '[GoogleAuth] DEVELOPER_ERROR (Code 10): Client configuration or SHA-1 fingerprint mismatch'
       );
-      throw new Error('Google Sign-In configuration is still syncing with the server. Please wait a moment and try again, or continue as guest.');
+      throw new Error(
+        'Google Sign-In error (Code 10 / DEVELOPER_ERROR): The app certificate SHA-1 fingerprint is not registered in Firebase / Google Cloud Console.'
+      );
     }
 
     // 5. Network / timeout error
@@ -195,9 +215,32 @@ export async function signInWithGoogleNative(): Promise<UserProfile> {
       code === statusCodes?.NETWORK_ERROR ||
       code === 'NETWORK_ERROR' ||
       code === '7' ||
-      msg.includes('network')
+      code === 'auth/network-request-failed' ||
+      code === 'unavailable' ||
+      msg.includes('network') ||
+      msg.includes('connection') ||
+      msg.includes('offline')
     ) {
-      throw new Error('Unable to reach Google sign-in services. Please check your connection and try again.');
+      throw new Error('Unable to reach Google or Firebase services. Please check your internet connection.');
+    }
+
+    // 6. Firebase Auth specific errors
+    if (code.startsWith('auth/')) {
+      if (code === 'auth/operation-not-allowed') {
+        throw new Error('Google Sign-In is not enabled in Firebase Authentication console (auth/operation-not-allowed).');
+      }
+      if (code === 'auth/invalid-credential' || code === 'auth/invalid-id-token') {
+        throw new Error('Google authentication token was rejected by Firebase (auth/invalid-credential).');
+      }
+      if (code === 'auth/user-disabled') {
+        throw new Error('This user account has been disabled in Firebase.');
+      }
+      throw new Error(`Firebase Auth error [${code}]: ${rawMsg || 'Authentication rejected'}`);
+    }
+
+    // 7. If there is a specific descriptive error message, present it
+    if (rawMsg && !rawMsg.includes('[object Object]')) {
+      throw new Error(rawMsg);
     }
 
     // Fallback friendly error
@@ -341,12 +384,14 @@ export async function syncUserProfileToFirestore(user: User): Promise<UserProfil
   } catch (err: any) {
     fetchError = err;
     console.warn('[Firestore] Could not fetch existing profile from server:', err);
-  }
-
-  // If fetch failed due to network / connectivity issues, do NOT create a false "not onboarded" profile!
-  // Throw so useAuthStore knows this is a network failure, not a brand-new user needing setup.
-  if (fetchError) {
-    throw fetchError;
+    // Try restoring profile from AsyncStorage local cache
+    try {
+      const cached = await AsyncStorage.getItem(`@campusmind_user_profile_${user.uid}`);
+      if (cached) {
+        existingProfile = JSON.parse(cached);
+        fetchError = null;
+      }
+    } catch {}
   }
 
   const isOnboarded = Boolean(existingProfile.isOnboarded || existingProfile.username);
