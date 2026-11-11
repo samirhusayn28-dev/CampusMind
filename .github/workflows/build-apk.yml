@@ -147,11 +147,11 @@ jobs:
 
             Download and install the standalone **CampusMind Universal Android APK** directly onto your phone without needing Expo Go or any local developer setup.
 
-            ### 🚀 What's New in v1.4.3:
+            ### 🚀 What's New in v1.4.4:
+            - **Google Sign-In Authentication Fixes:** Stabilized native Google authentication pipeline, disabled unnecessary `offlineAccess` server code requests, added automated token recovery fallback via `GoogleSignin.getTokens()`, and handled user cancellations cleanly without false errors.
+            - **Firestore Profile Sync Resilience:** Protected user login flow with local cache restoration and graceful authentication fallback, preventing transient network latency from blocking sign-in.
             - **Developer Profile & Branding:** Rebranded application developer credentials to Samir Husayn with interactive GitHub repository links (github.com/samirhusayn28-dev) and direct developer email communication (sameerhussainsoomro22@gmail.com).
-            - **Robust Multi-Format Document Ingestion:** Production support across PDF (.pdf), Word (.docx), PowerPoint (.pptx), Excel (.xlsx), and CSV (.csv) with resilient on-device parsing fallback and zero upload interruption.
-            - **FlateDecode PDF Text Extraction:** Solved PDF stream decompression to eliminate garbled binary characters, non-printable encoding artifacts, and corrupted stream parsing.
-            - **Keystore & Build Tooling:** ES module syntax compliance for automated release keystore generation and Android APK compilation.
+            - **Multi-Format Document Ingestion & FlateDecode:** Complete production support for PDF (.pdf), Word (.docx), PowerPoint (.pptx), Excel (.xlsx), and CSV (.csv) with in-app FlateDecode stream decompression.
 
             ### ✨ Core Features:
             - **Material You Aesthetic:** Soft pastel palette, cozy warm charcoal dark mode, rounded Plus Jakarta Sans typography, and fluid micro-interactions.
